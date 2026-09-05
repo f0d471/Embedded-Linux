@@ -1,0 +1,6 @@
+# 全仓统一 LF。check.sh 和 Makefile 要在 WSL / 开发板上跑，
+# 带 CRLF 会让 bash 报 $'\r' 之类的错，make 也会把 \r 当成命令的一部分。
+* text=auto eol=lf
+
+# 只有 Windows 侧的 PowerShell 脚本保持 CRLF。
+*.ps1 text eol=crlf
