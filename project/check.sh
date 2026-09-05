@@ -101,6 +101,48 @@ make CFLAGS_EXTRA=-DLOG_LEVEL=0 >/dev/null 2>&1
 ck "LOG_LEVEL=0 时输出行数" "$(./build/x86/product_tool 2>&1 | wc -l)" "0"
 ck "LOG_LEVEL=0 时退出码"   "$(./build/x86/product_tool >/dev/null 2>&1; echo $?)" "0"
 
+echo "[6] 日志落文件: LOG_FILE 存在时把 stderr 整条接到文件"
+rm -rf build
+make >/dev/null 2>&1
+LOGF="$W/run.log"
+rm -f "$LOGF"
+ck "不设 LOG_FILE 时终端行数" "$(./build/x86/product_tool 2>&1 | wc -l)" "13"
+ck "设了 LOG_FILE 时终端行数" "$(LOG_FILE=$LOGF ./build/x86/product_tool 2>&1 | wc -l)" "0"
+ck "第一次跑完文件行数"       "$(wc -l < "$LOGF")" "13"
+LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
+ck "第二次跑完文件行数(O_APPEND 接着写)" "$(wc -l < "$LOGF")" "26"
+ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool >/dev/null 2>&1; echo $?)" "1"
+
+# stderr 不带缓冲 => 13 条日志正好是 13 次 write。这条是 02 章第 4 节那个结论的守门人。
+if command -v strace >/dev/null 2>&1; then
+	rm -f "$LOGF"
+	strace -f -e trace=write -o "$W/tw.txt" \
+		env LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
+	ck "13 条日志对应 13 次 write(2,...)" \
+	   "$(grep -cE '(^|[0-9]+ +)write\(2,' "$W/tw.txt")" "13"
+else
+	skip "stderr 无缓冲判据" "没装 strace"
+fi
+
+echo "[6r] 注错: O_APPEND 换成 O_TRUNC"
+sed -i 's/O_WRONLY | O_CREAT | O_APPEND/O_WRONLY | O_CREAT | O_TRUNC/' common.c
+rm -rf build
+make >/dev/null 2>&1
+rm -f "$LOGF"
+LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
+LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
+red "第二次跑完文件行数" "$(wc -l < "$LOGF")" "26"
+
+echo "[6r2] 注错: 去掉 dup2, 只开文件不换 2 号槽"
+cp "$SRC/common.c" common.c
+sed -i 's/if (dup2(fd, STDERR_FILENO) < 0)/if (0)/' common.c
+rm -rf build
+make >/dev/null 2>&1
+rm -f "$LOGF"
+LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
+red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "13"
+cp "$SRC/common.c" common.c
+
 echo
 echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 [ "$FAIL" -eq 0 ]

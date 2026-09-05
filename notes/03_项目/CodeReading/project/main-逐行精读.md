@@ -1,6 +1,6 @@
 # main.c 逐行精读
 
-对应代码：`project/main.c`，90 行。
+对应代码：`project/main.c`，107 行。
 
 前置：函数指针的写法与 `common.h` 里的错误码、日志宏，
 见 [common 逐行精读](common-逐行精读.md)。
@@ -30,9 +30,11 @@
 
 ---
 
-## 2. 包含（第 13 到 20 行）
+## 2. 包含（第 13 到 22 行）
 
 ```c
+#include <stdlib.h>
+
 #include "common.h"
 
 #include "display/disp_manager.h"
@@ -43,19 +45,21 @@
 #include "business/business_manager.h"
 ```
 
-八个包含，一个系统头都没有。`stdio.h` 是被 `common.h` 带进来的，
-`main.c` 自己不直接用它。
+九个包含，只有一个系统头 `stdlib.h`，为的是 `getenv`。
+`stdio.h` 是被 `common.h` 带进来的，
+`main.c` 自己不直接用它。系统头和项目头之间空一行分开，
+是为了让"这个文件碰了哪些系统能力"一眼可见 —— 现在只碰了环境变量这一项。
 
 六个层头文件的顺序和层表的顺序一致，也和分层图自底向上的顺序一致。
 这个顺序在编译上没有任何作用（六个头文件互不依赖），
-它的作用是让人在读到第 32 行的层表时，发现两处顺序一样，
+它的作用是让人在读到第 34 行的层表时，发现两处顺序一样，
 从而确认这不是随手排的。
 
 带目录前缀的写法见[层管理器空壳精读](层管理器空壳-逐行精读.md)第 3.1 节。
 
 ---
 
-## 3. 层表（第 22 到 39 行）
+## 3. 层表（第 24 到 41 行）
 
 ```c
 struct layer {
@@ -115,7 +119,7 @@ static const struct layer g_layers[] = {
 
 ---
 
-## 4. 反序退出（第 41 到 48 行）
+## 4. 反序退出（第 43 到 50 行）
 
 ```c
 /* 反序退出前 n 层。n 等于层数就是全部退出 */
@@ -143,7 +147,7 @@ static void layers_exit(int n)
 
 ---
 
-## 5. 正序初始化与失败回滚（第 50 到 65 行）
+## 5. 正序初始化与失败回滚（第 52 到 67 行）
 
 ```c
 static int layers_init(void)
@@ -197,7 +201,7 @@ static int layers_init(void)
 
 ---
 
-## 6. 主循环与入口（第 67 到 90 行）
+## 6. 主循环与入口（第 69 到 107 行）
 
 ```c
 static int main_loop(void)
@@ -217,9 +221,20 @@ static int main_loop(void)
 int main(int argc, char **argv)
 {
 	int ret;
+	const char *log_path;
 
 	(void)argc;
 	(void)argv;
+
+	/* 注释见源码第 84 到 88 行 */
+	log_path = getenv("LOG_FILE");
+	if (log_path != NULL) {
+		ret = log_redirect(log_path);
+		if (ret != ERR_OK) {
+			LOG_ERR("cannot redirect log to %s: %s", log_path, err_str(ret));
+			return 1;
+		}
+	}
 
 	ret = layers_init();
 	if (ret != ERR_OK)
@@ -232,6 +247,22 @@ int main(int argc, char **argv)
 	return (ret == ERR_OK) ? 0 : 1;
 }
 ```
+
+**日志重定向必须排在 `layers_init()` 前面。** 这一段如果挪到初始化后面，
+六层的 12 条 `init OK` / `exit OK` 里，前 6 条已经打到终端去了，
+日志文件只剩 7 行。判据 `[6]` 期望的是 13 行，挪一下就会红。
+这条顺序约束和层表那条（靠后的层可以用靠前的层）是同一类东西：
+**能观测的就写成判据，写不成判据的就写进注释。**
+
+**`getenv` 返回 `NULL` 和返回 `""` 是两回事。** `LOG_FILE` 没设是 `NULL`，
+`LOG_FILE=` 这样写是 `""`。这里只判 `NULL`，空串那一半交给
+`log_redirect` 内部去判并返回 `ERR_PARAM`（见 [common 精读](common-逐行精读.md) 第 9.1 节）。
+分工的理由是：**参数合法性归被调方，"要不要调"归调用方。**
+
+**重定向失败是致命的，直接 `return 1`。** 不是"退回到终端继续跑"。
+理由是：用户显式设了 `LOG_FILE`，说明他要的就是那份日志；
+静默地降级成打到终端，等于跑完了才发现什么都没留下。
+这时 `LOG_ERR` 打到的是**原来的** stderr —— `dup2` 还没成功，2 号槽没动过。
 
 **`(void)argc;` 是在关警告。** `CFLAGS` 里有 `-Wextra`，它包含 `-Wunused-parameter`，
 不用的参数会报警告。`main` 的签名不能改，所以用 `(void)` 把它们"用"一次。
@@ -259,11 +290,15 @@ int main(int argc, char **argv)
 
 | 步 | 位置 | 动作 | 可观测输出 |
 |---|---|---|---|
-| 1 | `main` 第 81 行 | 调 `layers_init()` | 无 |
+| 0 | `main` 第 89 到 96 行 | 查 `LOG_FILE`，设了就 `log_redirect()` | 无（此后的输出全落进那个文件） |
+| 1 | `main` 第 98 行 | 调 `layers_init()` | 无 |
 | 2 | `layers_init` i=0..5 | 依次调六个 `init` | 六行 `xxx init OK` |
-| 3 | `main` 第 85 行 | 调 `main_loop()` | 一行 `framework is up...` |
-| 4 | `main` 第 87 行 | `layers_exit(6)` | 六行 `xxx exit OK`，顺序反过来 |
-| 5 | `main` 第 89 行 | 返回 0 | 退出码 0 |
+| 3 | `main` 第 102 行 | 调 `main_loop()` | 一行 `framework is up...` |
+| 4 | `main` 第 104 行 | `layers_exit(6)` | 六行 `xxx exit OK`，顺序反过来 |
+| 5 | `main` 第 106 行 | 返回 0 | 退出码 0 |
+
+六层各两行加 `framework is up` 一行，一次运行正好 **13 行**。
+判据 `[6]` 里那几个 13 和 26 就是这么来的。
 
 一次第三层失败的运行：
 
@@ -272,7 +307,7 @@ int main(int argc, char **argv)
 | 1 | `layers_init` i=0,1 | display、input 成功 | 两行 `init OK` |
 | 2 | `layers_init` i=2 | font 返回非 `ERR_OK` | 一行 `font_init failed: <原因>` |
 | 3 | `layers_exit(2)` | 反序退 input、display | 两行 `exit OK` |
-| 4 | `main` 第 83 行 | 返回 1 | 退出码 1 |
+| 4 | `main` 第 100 行 | 返回 1 | 退出码 1 |
 
 第二张表目前**没有判据覆盖**，因为六层空壳全都无条件返回 `ERR_OK`，
 构造不出失败。等某一层真的会失败之后要补一条。
@@ -294,7 +329,7 @@ int main(int argc, char **argv)
 判据量的是各层自己打的那一份。
 
 **`return (ret == ERR_OK) ? 0 : 1;` 里 `ret` 是 `main_loop()` 的返回值**，
-不是 `layers_init()` 的——后者已经在第 83 行提前返回了。
+不是 `layers_init()` 的——后者已经在第 100 行提前返回了。
 
 ---
 
@@ -305,8 +340,9 @@ int main(int argc, char **argv)
 | 六层的 `*_manager.h` | 被本文件包含，提供十二个函数声明 |
 | `include/common.h` | 提供错误码、日志宏、`ARRAY_SIZE`、`err_str()` |
 | `Makefile` 第 25 行 | `$(wildcard *.c)` 把本文件收进源文件列表 |
-| `check.sh` 第 45 行 | `sed '/{ "business",/d'` 删掉层表第 38 行做注错 |
+| `check.sh` 第 45 行 | `sed '/{ "business",/d'` 删掉层表里 business 那一行（源码第 40 行）做注错 |
 | `check.sh` 第 50 行 | 从原目录复制一份 `main.c` 回来还原 |
+| `check.sh` 第 104 到 144 行 | `LOG_FILE` 这条通路，以及 13 / 26 这两个行数 |
 
 `check.sh` 那个 `sed` 匹配的是 `{ "business",` 这个字面形状。
 层表的写法改成别的对齐方式（比如去掉 `"business"` 后面那个逗号前的空格），

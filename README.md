@@ -135,7 +135,7 @@
 `notes/` 主线章节和 `notes/03_项目/` 的分工：前者讲"这个知识点怎么学会"，
 后者讲"这段代码为什么长这样、这一行在算什么"。同一件事在两边都出现是正常的。
 
-## 五点五、文档规则
+## 六、文档规则
 
 **每一次 commit，都要在同一次 commit 里把它影响到的文档改完。**
 
@@ -157,10 +157,19 @@
             gcc 内部三个程序、静态库动态库现场制作、假想目标的坑、通用 Makefile）
             基础知识库已配套 5 篇：ELF / ARM 寄存器 / ABI 与 sysroot /
                                    静态库动态库与符号 / 系统调用
-            L4 已落地并自验：project/check.sh  18 PASS / 0 FAIL / 0 SKIP
+            L4 已落地并自验：project/ 六层空壳骨架 + 两棵产物树
             工程文档已配套：TechReports 1 篇 + CodeReading 5 篇 + 路线图 1 篇
             L1 / L2 / L3 待做；上板实验待做（板子已到货）
         [ ] 02 文件 IO
+            笔记 1094 行：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
+            read/write 是"最多"不是"正好"、O_APPEND 的原子性（并发实测）、
+            标准 IO 那层 buffer（strace 数出 3 次 vs 1000 次 write）、
+            mmap（系统调用少 2000 倍但耗时看不出稳定差别）
+            基础知识库新增 2 篇：文件描述符与 VFS / 虚拟内存与 mmap
+            L4 已落地并自验：log_redirect() 用 dup2 换掉 2 号槽，
+                             六层代码一字未改；check.sh  26 PASS / 0 FAIL / 0 SKIP
+            工程文档已配套：TechReports 第 02 章 + CodeReading 三篇订正
+            L1 / L2 / L3 待做；上板实验待做
         [ ] 03 Framebuffer 显示
         [ ] 04 文字显示（ASCII / 中文 / freetype）
         [ ] 05 输入系统

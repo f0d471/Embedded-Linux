@@ -25,6 +25,17 @@ enum {
 const char *err_str(int err);
 
 /*
+ * 把 stderr 整条接到一个文件上, 之后所有 LOG_* 都落进这个文件。
+ * 成功返回 ERR_OK, 路径为空返回 ERR_PARAM, 文件打不开返回 ERR_IO。
+ *
+ * 日志走 stderr 而不是 stdout, 是因为 C 标准规定 stderr 不带缓冲: 每条 fprintf
+ * 立刻变成一次 write, 板子掉电时不会丢掉还压在缓冲区里的那几 KB。
+ * 为什么用 dup2 而不是给每层加一个"日志句柄"参数, 见
+ * notes/01_应用编程/02_文件IO.md 第 6 节。
+ */
+int log_redirect(const char *path);
+
+/*
  * 日志。级别在编译期决定, 关掉的级别整条语句被预处理器删干净, 不留运行时开销。
  *   make CFLAGS_EXTRA=-DLOG_LEVEL=0    全关
  *   0 全关   1 只留错误   2 错误+信息(默认)   3 加上调试

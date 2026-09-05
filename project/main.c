@@ -10,6 +10,8 @@
  * 这一条守住了, 项目才长得大。破了之后就回不来了。
  */
 
+#include <stdlib.h>
+
 #include "common.h"
 
 #include "display/disp_manager.h"
@@ -74,9 +76,24 @@ static int main_loop(void)
 int main(int argc, char **argv)
 {
 	int ret;
+	const char *log_path;
 
 	(void)argc;
 	(void)argv;
+
+	/*
+	 * 板子上只有一根串口, 输出刷过去就没了, 也没法回头翻。设了 LOG_FILE 就把
+	 * 日志整条接到那个文件, 事后能查; 没设就照旧打到串口。
+	 * 这一步必须排在 layers_init 前面: 接晚了, 已经打出去的那几行就落不进文件。
+	 */
+	log_path = getenv("LOG_FILE");
+	if (log_path != NULL) {
+		ret = log_redirect(log_path);
+		if (ret != ERR_OK) {
+			LOG_ERR("cannot redirect log to %s: %s", log_path, err_str(ret));
+			return 1;
+		}
+	}
 
 	ret = layers_init();
 	if (ret != ERR_OK)
