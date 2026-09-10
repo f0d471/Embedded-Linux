@@ -133,7 +133,7 @@ LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 red "第二次跑完文件行数" "$(wc -l < "$LOGF")" "26"
 
-echo "[6r2] 注错: 去掉 dup2, 只开文件不换 2 号槽"
+echo "[6r2] 注错: 去掉 dup2, 日志去向没有从终端改成文件"
 cp "$SRC/common.c" common.c
 sed -i 's/if (dup2(fd, STDERR_FILENO) < 0)/if (0)/' common.c
 rm -rf build

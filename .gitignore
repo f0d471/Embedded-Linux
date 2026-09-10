@@ -9,3 +9,16 @@ labs/**/hello_x86
 labs/**/hello_arm_dynamic
 labs/**/hello_arm_static
 labs/**/*.gz
+
+# labs/00_basics/ 下一律只收源码和脚本，编译产物全部由各目录的 check.sh 重建。
+# 用白名单而不是逐个列举产物名：列举漏一个就会把二进制提交进去。
+labs/00_basics/**/*
+!labs/00_basics/**/
+!labs/00_basics/**/*.c
+!labs/00_basics/**/*.h
+!labs/00_basics/**/*.sh
+!labs/00_basics/**/*.md
+
+# 01 章的 .bss 对照实验产物（01_ELF与程序加载 第四节），由笔记里的命令重建。
+labs/01_toolchain/big1
+labs/01_toolchain/big2

@@ -16,7 +16,7 @@
 里定下的那几条约定还成立没有：六层按顺序起停、加 `.c` 不用改 `Makefile`、
 改头文件会全量重编、两个架构的产物并存、日志能整体关掉。
 第 02 章之后又多了一条：日志能整条接到文件上，并且是 stderr 那种一行一次 write 的接法
-（见 [TechReports 第 02 章](../../TechReports/project/02-日志落文件-用dup2换掉2号槽.md)）。
+（见 [TechReports 第 02 章](../../TechReports/project/02-日志落文件-让现有LOG自动写入文件.md)）。
 
 文件头写着两条原则（第 5 到 8 行）：
 
@@ -382,8 +382,8 @@ ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/
 | 判据 | 它单独能排除什么 | 它单独排除不了什么 |
 |---|---|---|
 | 终端 13 行 | 程序根本没跑起来 | 重定向有没有生效 |
-| 终端 0 行 | `dup2` 没换掉 2 号槽 | 文件里有没有东西 |
-| 文件 13 行 | 换了槽但写丢了 | 是不是每次都清空 |
+| 终端 0 行 | 日志去向没有从终端改成文件 | 文件里有没有东西 |
+| 文件 13 行 | 去向改了但内容写丢了 | 是不是每次都清空 |
 | 文件 26 行 | `O_APPEND` 被换成 `O_TRUNC` | — |
 | 退出码 1 | 打不开时静默降级继续跑 | — |
 
@@ -442,7 +442,7 @@ red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "13"
 
 第一次注错把 `O_APPEND` 换成 `O_TRUNC`，第二次跑完只剩 13 行。
 第二次注错把 `dup2` 那个 `if` 的条件换成 `if (0)` —— 文件照开、
-错误照判、`fd` 照关，唯独 2 号槽没换，日志文件因此是 0 行。
+错误照判、`fd` 照关，唯独没有把 `stderr` 的去向改成文件，因此日志文件是 0 行。
 
 **`if (0)` 这个改法是特意挑的**，因为它编得过：直接删掉整个 `if` 块
 会留下 `fd` 未被使用的路径变化，`-Wall -Wextra` 下未必干净；
@@ -530,7 +530,7 @@ echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 | `Makefile` 的 `clean` / `distclean` | 两者的差别 |
 | `main.c` 第 40 行 | `{ "business",` 这个字面形状 |
 | `main.c` 第 89 行 | 环境变量名 `LOG_FILE` |
-| `common.c` 第 36 行 | `O_WRONLY`、`O_CREAT`、`O_APPEND` 三个 flag 拼写与空格 |
-| `common.c` 第 47 行 | `if (dup2(fd, STDERR_FILENO) < 0)` 这个字面形状 |
+| `common.c` 第 38 行 | `O_WRONLY`、`O_CREAT`、`O_APPEND` 三个 flag 拼写与空格 |
+| `common.c` 第 49 行 | `if (dup2(fd, STDERR_FILENO) < 0)` 这个字面形状 |
 | 六层的 `*_init()` / `*_exit()` | 日志文本以 `<层名> init OK` 结尾 |
 | `include/common.h` | `LOG_LEVEL` 这个编译期开关 |

@@ -262,7 +262,7 @@ int main(int argc, char **argv)
 **重定向失败是致命的，直接 `return 1`。** 不是"退回到终端继续跑"。
 理由是：用户显式设了 `LOG_FILE`，说明他要的就是那份日志；
 静默地降级成打到终端，等于跑完了才发现什么都没留下。
-这时 `LOG_ERR` 打到的是**原来的** stderr —— `dup2` 还没成功，2 号槽没动过。
+这时 `LOG_ERR` 仍显示在原来的终端上，因为 `dup2` 没成功，`stderr` 的去向没有改变。
 
 **`(void)argc;` 是在关警告。** `CFLAGS` 里有 `-Wextra`，它包含 `-Wunused-parameter`，
 不用的参数会报警告。`main` 的签名不能改，所以用 `(void)` 把它们"用"一次。

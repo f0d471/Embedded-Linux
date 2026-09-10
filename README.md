@@ -150,6 +150,23 @@
 
 ## 六、进度
 
+    [x] 00 基础知识库  2026-09-08 全部八篇按新体例重写完毕
+                       体例与三条换代理由见 notes/00_基础/README.md
+        每篇配一个 check.sh，合计 185 条判据全绿，每篇都做过注错见红。
+        一次跑全部：for d in labs/00_basics/*/; do bash "$d/check.sh"; done
+
+        00 从源码到运行     新写，其余各篇的前置。四个程序的交接过程，
+                            section 从"链接器按什么单位合并"里被逼出来
+        01 ELF 与程序加载   删掉整张 section 表（-3580 字节）程序照跑，
+                            只改 2 字节让 segment 数归零就 Exec format error
+        02 ARM 寄存器       不先给寄存器表，用反汇编把调用约定逼出来
+        03 ABI 与 sysroot   用 _Static_assert 问出跑不了的平台上的类型大小；
+                            实测发现 libc.so 是链接脚本不是 ELF（推翻旧判据）
+        04 静态库动态库     决定性实验：改库不重编程序，动态版 7->12、静态版不变
+        05 系统调用         绕过 libc 自己发 syscall；三档缓冲实测
+        06 fd 与 VFS        程序自己读 /proc/self/fdinfo，pos 是 1/0/1
+        07 虚拟内存与 mmap  懒分配的定量证据；顺带测出内核的 fault-around（32 页）
+
     [ ] 阶段 1  应用编程   PDF 141-300
         [ ] 01 工具链与构建系统（HelloWorld / GCC / Makefile）
             笔记已重写为导学定位：过滤表（11 集视频看哪几分钟）+ 第一性原理
@@ -161,12 +178,18 @@
             工程文档已配套：TechReports 1 篇 + CodeReading 5 篇 + 路线图 1 篇
             L1 / L2 / L3 待做；上板实验待做（板子已到货）
         [ ] 02 文件 IO
-            笔记 1094 行：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
+            笔记：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
             read/write 是"最多"不是"正好"、O_APPEND 的原子性（并发实测）、
             标准 IO 那层 buffer（strace 数出 3 次 vs 1000 次 write）、
             mmap（系统调用少 2000 倍但耗时看不出稳定差别）
+            8 集视频（2 小时 44 分）已融合，过滤表精确到时间段。视频独有的
+            三块全部补进笔记：两套接口的来历（POSIX vs C 标准）、
+            CSV 综合实验（PDF 4.3 那个空标题的全部内容，整理成 L3）、
+            内核那一侧的调用链与 OABI/EABI
+            实测更正一条：应用写 open，glibc 发的是 openat（ARM 上是 322 号
+            不是 5 号），视频里"open -> sys_open"那条链中间一环名字对不上
             基础知识库新增 2 篇：文件描述符与 VFS / 虚拟内存与 mmap
-            L4 已落地并自验：log_redirect() 用 dup2 换掉 2 号槽，
+            L4 已落地并自验：log_redirect() 让现有日志从终端改写到文件，
                              六层代码一字未改；check.sh  26 PASS / 0 FAIL / 0 SKIP
             工程文档已配套：TechReports 第 02 章 + CodeReading 三篇订正
             L1 / L2 / L3 待做；上板实验待做
