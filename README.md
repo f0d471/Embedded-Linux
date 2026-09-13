@@ -151,7 +151,9 @@
 ## 六、进度
 
     [x] 00 基础知识库  2026-09-08 全部八篇按新体例重写完毕
-                       体例与三条换代理由见 notes/00_基础/README.md
+                       2026-09-12 开头块再修订：改成"一句话本质 -> 你从哪儿撞见它
+                       -> 它被什么逼出来 -> 关键细节"，结论条数按内容定不再写死
+                       体例与四条换代理由见 notes/00_基础/README.md
         每篇配一个 check.sh，合计 185 条判据全绿，每篇都做过注错见红。
         一次跑全部：for d in labs/00_basics/*/; do bash "$d/check.sh"; done
 
@@ -176,7 +178,8 @@
                                    静态库动态库与符号 / 系统调用
             L4 已落地并自验：project/ 六层空壳骨架 + 两棵产物树
             工程文档已配套：TechReports 1 篇 + CodeReading 5 篇 + 路线图 1 篇
-            L1 / L2 / L3 待做；上板实验待做（板子已到货）
+            L1 / L2 / L3 待自己动手；ADB 上板闭环已真机验证：x86 格式错误、
+            ARM 动态版 glibc 不匹配、ARM 静态版成功，命令与退出码已写回笔记
         [ ] 02 文件 IO
             笔记：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
             read/write 是"最多"不是"正好"、O_APPEND 的原子性（并发实测）、
@@ -190,9 +193,11 @@
             不是 5 号），视频里"open -> sys_open"那条链中间一环名字对不上
             基础知识库新增 2 篇：文件描述符与 VFS / 虚拟内存与 mmap
             L4 已落地并自验：log_redirect() 让现有日志从终端改写到文件，
-                             六层代码一字未改；check.sh  26 PASS / 0 FAIL / 0 SKIP
+                             保留项目错误与系统 errno；六层代码一字未改；
+                             check.sh  29 PASS / 0 FAIL / 0 SKIP
             工程文档已配套：TechReports 第 02 章 + CodeReading 三篇订正
-            L1 / L2 / L3 待做；上板实验待做
+            L1 / L2 / L3 待自己动手；fd/追加/mmap/异常退出、eMMC 同步写与
+            project 日志判据均已在 ARM 真机复跑，完整步骤与输出已写回笔记
         [ ] 03 Framebuffer 显示
         [ ] 04 文字显示（ASCII / 中文 / freetype）
         [ ] 05 输入系统

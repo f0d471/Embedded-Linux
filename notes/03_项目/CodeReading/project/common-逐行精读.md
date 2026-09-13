@@ -1,6 +1,6 @@
 # common 逐行精读
 
-对应代码：`project/include/common.h`（50 行）与 `project/common.c`（62 行）。
+对应代码：`project/include/common.h`（50 行）与 `project/common.c`（51 行）。
 
 前置：C 预处理器的执行时机，见 [`notes/01_应用编程/01_工具链与构建系统.md`](../../../01_应用编程/01_工具链与构建系统.md)
 第 3 节（GCC 的四个步骤，预处理这一步）；
@@ -84,14 +84,20 @@ const char *err_str(int err);
 ## 4. log_redirect 的声明（第 19 到 20 行）
 
 ```c
-// 成功后，后续所有 LOG_* 日志都写入 path 指定的文件，不再显示在终端
-int log_redirect(const char *path);
+// 日志重定向，os_errno 不能为空；成功时为 0，系统调用失败时为 errno
+int log_redirect(const char *path, int *os_errno);
 ```
 
 它放在错误码之后、日志宏之前，是因为它的返回值是错误码，而它服务的对象是日志宏。
 
-先把这两行按普通话读一遍：调用者给它一个文件路径；如果函数成功，原来显示在终端
-里的项目日志从此写进这个文件。函数名里的 redirect 就是“改去处”。
+按普通话读一遍：调用者给它一个文件路径和一个保存系统错误码的位置；如果函数成功，
+原来显示在终端里的项目日志从此写进这个文件，`*os_errno` 是 0；如果系统调用失败，
+函数返回项目统一的 `ERR_IO`，具体原因另放进 `*os_errno`。函数名里的 redirect
+就是“改去处”。
+
+这里有意保留两层错误：`ERR_IO` 回答“项目哪类操作失败”，`errno` 回答“系统为什么
+失败”。调用方可以统一按 `ERR_*` 分支，同时用 `strerror(*os_errno)` 打出
+`No such file or directory` 这类现场信息。
 
 项目日志走 `stderr`。这个名字叫“标准错误输出”，默认通常连接终端。
 C 标准规定 `stderr` 不带缓冲：每条 `fprintf` 当场变成一次 `write`。
@@ -207,9 +213,13 @@ C 标准规定 `stderr` 不带缓冲：每条 `fprintf` 当场变成一次 `writ
 
 ---
 
-## 8. common.c：错误码翻译表（第 6 到 19 行）
+## 8. common.c：系统头与错误码翻译表（第 1 到 20 行）
 
 ```c
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include "common.h"
 
 const char *err_str(int err)
@@ -233,16 +243,20 @@ const char *err_str(int err)
 函数不能走到结尾而没有 `return`——那是未定义行为，
 `-Wall` 会报 "control reaches end of non-void function"。
 
+三个系统头各自对应 `log_redirect` 的一组依赖：`errno.h` 提供 `errno`，
+`fcntl.h` 提供 `open` 与 `O_*` 标志，`unistd.h` 提供 `dup2` 和 `close`。
+
 ---
 
-## 9. common.c：log_redirect（第 21 到 62 行）
+## 9. common.c：log_redirect（第 22 到 51 行）
 
 先看整段函数做成了什么：
 
 ```text
 调用前：LOG_INFO / LOG_ERR -> stderr（标准错误输出）-> 终端
 
-log_redirect("run.log") 成功后：
+int os_errno;
+log_redirect("run.log", &os_errno) 成功后：
         LOG_INFO / LOG_ERR -> stderr（标准错误输出）-> run.log
 ```
 
@@ -254,6 +268,7 @@ log_redirect("run.log") 成功后：
 | 代码里的名字 | 在这段函数里是什么意思 |
 |---|---|
 | `path` | 想把日志写到哪个文件，例如 `/tmp/run.log` |
+| `os_errno` | 输出参数；系统调用失败时保存具体 errno，成功或纯参数错误时为 0 |
 | `fd` | 系统为刚打开的文件分配的非负整数编号；以后用这个编号操作该文件 |
 | `stderr` | 标准错误输出；本项目所有 `LOG_*` 最终都写到这里，默认显示在终端 |
 | `STDERR_FILENO` | `stderr` 的数字编号，值是 2；代码写名字，读者不需要背“2 号” |
@@ -261,12 +276,19 @@ log_redirect("run.log") 成功后：
 | `dup2` | 把一个已经打开的文件设为某个现有输出的全新去向 |
 | `close` | 关闭一个不再需要的文件编号 |
 
-### 9.1 先确认真的给了路径（第 25 到 27 行）
+### 9.1 先建立输出参数契约，再检查路径（第 28 到 33 行）
 
 ```c
+	if (os_errno == NULL)
+		return ERR_PARAM;
+
+	*os_errno = 0;
 	if (path == NULL || path[0] == '\0')
 		return ERR_PARAM;
 ```
+
+先确认 `os_errno` 可写，再清成 0；顺序不能反，否则空指针会被解引用。
+清零之后才检查路径，保证 `LOG_FILE=` 这种参数错误不会把旧 errno 带给调用方。
 
 两种"没给路径"都要拦：指针为空，以及指向一个空串。
 后者是 `getenv("LOG_FILE")` 在 `LOG_FILE=` 这样写时的返回值 ——
@@ -274,15 +296,19 @@ log_redirect("run.log") 成功后：
 少了 `path[0] == '\0'` 这一半，`open("")` 会失败并返回 `ERR_IO`，
 错误码就报错了原因。
 
-### 9.2 打开日志文件（第 38 到 40 行）
+### 9.2 打开日志文件并保存 open 的 errno（第 35 到 39 行）
 
 ```c
 	fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
-	if (fd < 0)
+	if (fd < 0) {
+		*os_errno = errno;
 		return ERR_IO;
+	}
 ```
 
-`open` 成功后把文件编号放进 `fd`；失败时 `fd` 是负数，函数返回 `ERR_IO`。
+`open` 成功后把文件编号放进 `fd`；失败时 `fd` 是负数。代码立即保存 `errno`，
+再返回项目层的 `ERR_IO`。不能只返回 `ERR_IO`，否则目录不存在、权限不足、磁盘异常
+都会退化成同一句 `device io failed`。
 
 | 选项 | 直接效果 | 不这样写的后果 |
 |---|---|---|
@@ -304,11 +330,14 @@ log_redirect("run.log") 成功后：
 系统还可以根据当前的默认权限限制继续收紧它；这个限制的名字是 `umask`。
 所以 `0644` 是这次创建所允许的上限，不保证文件最终一定恰好是这个权限。
 
-### 9.3 把日志去向从终端改成文件（第 49 到 52 行）
+### 9.3 改变去向，并保住 dup2 的 errno（第 41 到 47 行）
 
 ```c
 	if (dup2(fd, STDERR_FILENO) < 0) {
+		// close 也可能改 errno，先保存 dup2 的失败原因
+		saved_errno = errno;
 		close(fd);
+		*os_errno = saved_errno;
 		return ERR_IO;
 	}
 ```
@@ -331,16 +360,18 @@ log_redirect("run.log") 成功后：
 要改变的是 `stderr`。成功以后，所有继续写 `stderr` 的代码都会进入日志文件，
 终端不再显示这些日志。判据里“设了 `LOG_FILE` 时终端 0 行”量的就是这个结果。
 
-如果 `dup2` 失败，日志去向没有改成。刚才打开的文件已经没有用途，
-所以先 `close(fd)` 再返回错误。
+如果 `dup2` 失败，日志去向没有改成。刚才打开的文件已经没有用途，必须关闭；
+但 `close` 也是系统调用，可能覆盖全局 `errno`。因此先把 `dup2` 的失败原因存进
+`saved_errno`，清理之后再写入输出参数。顺序是“保存现场 → 清理资源 → 返回错误”。
 
 想继续理解 Linux 内部怎样保存这些去向，再看
 [`notes/00_基础/06_文件描述符与VFS.md`](../../../00_基础/06_文件描述符与VFS.md) 第 3 节。
 
 判据 `[6r2]` 把这个 `if` 的条件换成 `if (0)`，等于文件开了但 2 号没换，
-日志照旧去终端，日志文件是 0 行。
+日志照旧去终端，日志文件是 0 行。`[6r3]` 则把 open 失败分支的
+`*os_errno = errno` 改成 0，证明退出码仍为 1 时具体失败原因仍可能丢失。
 
-### 9.4 为什么最后关闭 fd，日志仍能继续写（第 60 行）
+### 9.4 为什么最后关闭 fd，日志仍能继续写（第 49 行）
 
 ```c
 	close(fd);
@@ -392,7 +423,7 @@ close(fd) 之后：只剩 stderr 通往日志文件，LOG_* 继续正常写
 | `main.c` | 错误码、`LOG_ERR`、`LOG_INFO`、`ARRAY_SIZE`、`err_str()` |
 | `display/disp_manager.c` 等六份 | `ERR_OK`、`LOG_INFO` |
 | `check.sh` 第 100 到 102 行 | `LOG_LEVEL` 这个编译期开关 |
-| `check.sh` 第 104 到 144 行 | `log_redirect()`，以及对 `O_APPEND` 和 `dup2` 的两次注错 |
+| `check.sh` 第 104 到 162 行 | `log_redirect()`，具体 errno，以及对 `O_APPEND`、`dup2`、errno 的三次注错 |
 | `Makefile` 第 30 行 | 通过 `CFLAGS_EXTRA` 把 `-DLOG_LEVEL=` 传进来 |
 
 `check.sh` 第 69 到 72 行临时造出来的那个 `display/disp_dummy.c` 也包含它，

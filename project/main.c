@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "common.h"
 
@@ -62,6 +63,7 @@ static int main_loop(void)
 int main(int argc, char **argv)
 {
 	int ret;
+	int os_errno = 0;
 	const char *log_path;
 
 	(void)argc;
@@ -69,10 +71,17 @@ int main(int argc, char **argv)
 
 	// 日志重定向
 	log_path = getenv("LOG_FILE");
+
 	if (log_path != NULL) {
-		ret = log_redirect(log_path);
+		ret = log_redirect(log_path, &os_errno);
 		if (ret != ERR_OK) {
-			LOG_ERR("cannot redirect log to %s: %s", log_path, err_str(ret));
+			if (os_errno != 0) {
+				LOG_ERR("cannot redirect log to %s: %s (%s)",
+					log_path, err_str(ret), strerror(os_errno));
+			} else {
+				LOG_ERR("cannot redirect log to %s: %s",
+					log_path, err_str(ret));
+			}
 			return 1;
 		}
 	}

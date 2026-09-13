@@ -4,7 +4,7 @@ build/
 .*.d
 
 # labs/ 下的编译产物：由 hello.c 现场编出来，不入库。
-# 首次上板的原始运行记录 board-results.txt 是实测证据，要入库。
+# 上板的命令与输出直接写回笔记，不另存原始记录。
 labs/**/hello_x86
 labs/**/hello_arm_dynamic
 labs/**/hello_arm_static

@@ -111,7 +111,15 @@ ck "设了 LOG_FILE 时终端行数" "$(LOG_FILE=$LOGF ./build/x86/product_tool 
 ck "第一次跑完文件行数"       "$(wc -l < "$LOGF")" "13"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 ck "第二次跑完文件行数(O_APPEND 接着写)" "$(wc -l < "$LOGF")" "26"
-ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool >/dev/null 2>&1; echo $?)" "1"
+bad_out=$(LC_ALL=C LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool 2>&1); bad_rc=$?
+ck "日志文件打不开时退出码" "$bad_rc" "1"
+ck "日志文件打不开时系统错误" \
+   "$(printf '%s\n' "$bad_out" | sed -n 's|^.*cannot redirect log to /no/such/dir/x.log: ||p')" \
+   "device io failed (No such file or directory)"
+empty_out=$(LC_ALL=C LOG_FILE= ./build/x86/product_tool 2>&1)
+ck "LOG_FILE 为空时只有参数错误" \
+   "$(printf '%s\n' "$empty_out" | sed -n 's|^.*cannot redirect log to : ||p')" \
+   "invalid parameter"
 
 # stderr 不带缓冲 => 13 条日志正好是 13 次 write。这条是 02 章第 4 节那个结论的守门人。
 if command -v strace >/dev/null 2>&1; then
@@ -141,6 +149,16 @@ make >/dev/null 2>&1
 rm -f "$LOGF"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "13"
+cp "$SRC/common.c" common.c
+
+echo "[6r3] 注错: open 失败时不带出 errno"
+sed -i 's/\*os_errno = errno;/\*os_errno = 0;/' common.c
+rm -rf build
+make >/dev/null 2>&1
+bad_out=$(LC_ALL=C LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool 2>&1)
+red "日志文件打不开时系统错误" \
+    "$(printf '%s\n' "$bad_out" | sed -n 's|^.*cannot redirect log to /no/such/dir/x.log: ||p')" \
+    "device io failed (No such file or directory)"
 cp "$SRC/common.c" common.c
 
 echo

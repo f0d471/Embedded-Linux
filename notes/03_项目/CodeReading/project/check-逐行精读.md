@@ -1,6 +1,6 @@
 # check.sh 逐行精读
 
-对应代码：`project/check.sh`，148 行。
+对应代码：`project/check.sh`，166 行。
 
 前置：`Makefile` 各开关的行为，见 [Makefile 逐行精读](Makefile-逐行精读.md)。
 
@@ -8,7 +8,7 @@
 
 ## 1. 文件定位
 
-`project/` 的判据。在 WSL 里 `bash check.sh` 跑一次，输出 26 条 PASS/FAIL，
+`project/` 的判据。在 WSL 里 `bash check.sh` 跑一次，输出 29 条 PASS/FAIL，
 末尾给计数，退出码为 0 表示全绿。
 
 它量的不是功能——这棵树现在没有功能。它量的是
@@ -191,7 +191,7 @@ ck  "其余 5 层照常启停(层间无隐式耦合)" "$(echo "$out2" | grep -c 
 cp "$SRC/main.c" main.c
 ```
 
-`sed -i '/{ "business",/d'` 删掉匹配这个形状的整行，也就是层表第 38 行。
+`sed -i '/{ "business",/d'` 删掉匹配这个形状的整行，也就是层表第 26 行。
 匹配的是字面量 `{ "business",`，**层表的写法一变这条注错就静默失效**：
 它会删不掉任何东西，然后 `red` 那一条会报"注错没红"——
 这个失效是看得见的，因为 `red` 会红。这是把注错做成判据的好处。
@@ -360,11 +360,11 @@ ck "LOG_LEVEL=0 时退出码"   "$(./build/x86/product_tool >/dev/null 2>&1; ech
 
 ---
 
-## 11. 第 6 组：日志落文件（第 104 到 144 行）
+## 11. 第 6 组：日志落文件（第 104 到 162 行）
 
-这一组是 02 章的产出，八条判据分三段。
+这一组是 02 章的产出，十一条判据分三段。
 
-### 11.1 正判据（第 104 到 114 行）
+### 11.1 正判据（第 104 到 122 行）
 
 ```bash
 LOGF="$W/run.log"
@@ -374,10 +374,18 @@ ck "设了 LOG_FILE 时终端行数" "$(LOG_FILE=$LOGF ./build/x86/product_tool 
 ck "第一次跑完文件行数"       "$(wc -l < "$LOGF")" "13"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 ck "第二次跑完文件行数(O_APPEND 接着写)" "$(wc -l < "$LOGF")" "26"
-ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool >/dev/null 2>&1; echo $?)" "1"
+bad_out=$(LC_ALL=C LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool 2>&1); bad_rc=$?
+ck "日志文件打不开时退出码" "$bad_rc" "1"
+ck "日志文件打不开时系统错误" \
+   "$(printf '%s\n' "$bad_out" | sed -n 's|^.*cannot redirect log to /no/such/dir/x.log: ||p')" \
+   "device io failed (No such file or directory)"
+empty_out=$(LC_ALL=C LOG_FILE= ./build/x86/product_tool 2>&1)
+ck "LOG_FILE 为空时只有参数错误" \
+   "$(printf '%s\n' "$empty_out" | sed -n 's|^.*cannot redirect log to : ||p')" \
+   "invalid parameter"
 ```
 
-四条判据量的是四件不同的事，缺一条就漏掉一种失效方式：
+七条判据量的是七件不同的事，缺一条就漏掉一种失效方式：
 
 | 判据 | 它单独能排除什么 | 它单独排除不了什么 |
 |---|---|---|
@@ -386,6 +394,8 @@ ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/
 | 文件 13 行 | 去向改了但内容写丢了 | 是不是每次都清空 |
 | 文件 26 行 | `O_APPEND` 被换成 `O_TRUNC` | — |
 | 退出码 1 | 打不开时静默降级继续跑 | — |
+| 具体系统错误 | `errno` 在项目错误码转换时丢失 | 其他 errno 是否正确 |
+| 空路径只有参数错误 | 旧 errno 被误带到没有系统调用失败的分支 | — |
 
 **13 和 26 这两个数是算出来的**，不是抄运行结果：
 六层各一行 `init OK`、各一行 `exit OK`，加 `main_loop` 那行 `framework is up`，
@@ -396,7 +406,11 @@ ck "日志文件打不开时退出码"   "$(LOG_FILE=/no/such/dir/x.log ./build/
 `trap` 会连它一起删掉。写死 `/tmp` 会在跑完之后留垃圾，
 更糟的是两个人同时跑这个脚本会互相踩。
 
-### 11.2 stderr 无缓冲那条（第 116 到 125 行）
+两条错误文本判据都先用 `LC_ALL=C` 固定 `strerror` 的语言，再用 `sed` 去掉
+日志宏自动添加的文件名和行号前缀，比较完整的错误正文。这样源码增删行不会让判据
+失效，同时也不是只检查某个词“出现过”的假绿判据。
+
+### 11.2 stderr 无缓冲那条（第 124 到 133 行）
 
 ```bash
 if command -v strace >/dev/null 2>&1; then
@@ -413,7 +427,7 @@ fi
 `stdout` 全缓冲的实现下也能全绿：数据最后照样进了文件，只是时机不同。
 只有数系统调用次数才分得出 13 次一行一次，还是攒成一次。
 
-而"日志走 stderr"正是这套设计的地基（`common.h` 第 27 到 35 行那段注释），
+而"日志走 stderr"正是这套设计的地基（`common.h` 第 27 到 37 行），
 所以它必须有自己的守门人。
 
 三个写法上的点：
@@ -427,7 +441,7 @@ fi
 - 用 `if command -v` 包起来，没装 strace 时走 `skip` 而不是 `FAIL`。
   这是本脚本第二处 SKIP 分支，第一处是第 2 组的交叉工具链。
 
-### 11.3 两次注错（第 127 到 144 行）
+### 11.3 三次注错（第 135 到 162 行）
 
 ```bash
 sed -i 's/O_WRONLY | O_CREAT | O_APPEND/O_WRONLY | O_CREAT | O_TRUNC/' common.c
@@ -438,24 +452,35 @@ cp "$SRC/common.c" common.c
 sed -i 's/if (dup2(fd, STDERR_FILENO) < 0)/if (0)/' common.c
 ...
 red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "13"
+
+sed -i 's/\*os_errno = errno;/\*os_errno = 0;/' common.c
+...
+red "日志文件打不开时系统错误" \
+    "$(printf '%s\n' "$bad_out" | sed -n 's|^.*cannot redirect log to /no/such/dir/x.log: ||p')" \
+    "device io failed (No such file or directory)"
 ```
 
 第一次注错把 `O_APPEND` 换成 `O_TRUNC`，第二次跑完只剩 13 行。
 第二次注错把 `dup2` 那个 `if` 的条件换成 `if (0)` —— 文件照开、
 错误照判、`fd` 照关，唯独没有把 `stderr` 的去向改成文件，因此日志文件是 0 行。
 
+第三次注错保留 `ERR_IO` 和退出码 1，只把 `*os_errno = errno` 改成 0。
+程序仍然知道“IO 失败”，却说不出为什么失败；错误正文从
+`device io failed (No such file or directory)` 退化成 `device io failed`。
+这证明原有退出码判据覆盖不到新增的 errno 通路。
+
 **`if (0)` 这个改法是特意挑的**，因为它编得过：直接删掉整个 `if` 块
 会留下 `fd` 未被使用的路径变化，`-Wall -Wextra` 下未必干净；
 把条件写成恒假，编译器只是把那一支优化掉，其余代码原样。
 注错本身必须能编译通过，否则量到的是"编译失败"而不是"判据变红"。
 
-第二次注错前先 `cp "$SRC/common.c"` 还原，否则两次注错叠在一起，
-第二条红了也说不清是哪一处造成的。**一次只坏一个地方**，
+第二、三次注错前都先从 `$SRC` 还原，避免多个错误叠在一起。
+后一个判据红了也必须能说清是哪一处造成的。**一次只坏一个地方**，
 这是本脚本里每一组注错都遵守的规矩。
 
 ---
 
-## 12. 结尾（第 146 到 148 行）
+## 12. 结尾（第 164 到 166 行）
 
 ```bash
 echo
@@ -483,11 +508,11 @@ echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 | 6 | 67-82 | 第 3 组，2 条 | 造出又删掉一个 `.c`，`Makefile` 被改坏又还原 |
 | 7 | 84-96 | 第 4 组，2 条 | `Makefile` 被改坏又还原 |
 | 8 | 98-102 | 第 5 组，2 条 | 用不同的 `CFLAGS` 重编一次 |
-| 9 | 104-125 | 第 6 组，6 条或 5 条加 1 条 SKIP | 在 `$W/run.log` 里攒下 26 行日志 |
-| 10 | 127-144 | 第 6r / 6r2 两组，各 1 条 | `common.c` 被改坏两次，各自还原 |
-| 11 | 146-148 | 打计数，定退出码 | trap 触发，删掉临时目录 |
+| 9 | 104-133 | 第 6 组，8 条或 7 条加 1 条 SKIP | 在 `$W/run.log` 里攒下 26 行日志，并核对两类错误文本 |
+| 10 | 135-162 | 第 6r / 6r2 / 6r3 三组，各 1 条 | `common.c` 被改坏三次，各自还原 |
+| 11 | 164-166 | 打计数，定退出码 | trap 触发，删掉临时目录 |
 
-第 4、6、7、10 步各有一次"改坏又还原"。还原用的是从 `$SRC` 复制，
+第 4、6、7、10 步包含"改坏又还原"。还原用的是从 `$SRC` 复制，
 所以**即使脚本在还原之前挂掉，也只是临时副本损坏**，工作区无恙。
 
 ---
@@ -506,9 +531,10 @@ echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 
 **`grep -c '^  CC '` 的空格数与 `Makefile` 里的 `echo` 绑死。** 改一处要改另一处。
 
-**判据总数 26 是"跑得到的条数"，不是"写了几条"。**
+**判据总数 29 是"跑得到的条数"，不是"写了几条"。**
 第 2 组在没装交叉工具链的机器上是 1 条 SKIP 而不是 5 条 PASS，
-那种情况下末尾会是 `PASS=22 FAIL=0 SKIP=1`；没装 strace 再少一条。
+那种情况下末尾会是 `PASS=25 FAIL=0 SKIP=1`；没装 strace 再少一条 PASS、
+多一条 SKIP。
 
 ---
 
@@ -516,7 +542,7 @@ echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 
 | 谁 | 关系 |
 |---|---|
-| 人 | `bash check.sh`，看 `PASS=26 FAIL=0 SKIP=0` |
+| 人 | `bash check.sh`，看 `PASS=29 FAIL=0 SKIP=0` |
 | `notes/03_项目/README.md` 的提交规则 | 判据条数变化时要同步根 `README.md` 的进度栏 |
 | 以后的 CI | 只看退出码 |
 
@@ -528,9 +554,10 @@ echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"
 | `Makefile` 第 53 行 | `"  CC    $<"` 的空格数 |
 | `Makefile` 第 54 行 | `-MMD -MP` 这个字面串 |
 | `Makefile` 的 `clean` / `distclean` | 两者的差别 |
-| `main.c` 第 40 行 | `{ "business",` 这个字面形状 |
-| `main.c` 第 89 行 | 环境变量名 `LOG_FILE` |
-| `common.c` 第 38 行 | `O_WRONLY`、`O_CREAT`、`O_APPEND` 三个 flag 拼写与空格 |
-| `common.c` 第 49 行 | `if (dup2(fd, STDERR_FILENO) < 0)` 这个字面形状 |
+| `main.c` 第 26 行 | `{ "business",` 这个字面形状 |
+| `main.c` 第 73 行 | 环境变量名 `LOG_FILE` |
+| `common.c` 第 35 行 | `O_WRONLY`、`O_CREAT`、`O_APPEND` 三个 flag 拼写与空格 |
+| `common.c` 第 41 行 | `if (dup2(fd, STDERR_FILENO) < 0)` 这个字面形状 |
+| `common.c` 第 37 行 | `*os_errno = errno;` 这个字面形状 |
 | 六层的 `*_init()` / `*_exit()` | 日志文本以 `<层名> init OK` 结尾 |
 | `include/common.h` | `LOG_LEVEL` 这个编译期开关 |

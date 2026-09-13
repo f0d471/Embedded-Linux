@@ -16,8 +16,8 @@ enum {
 
 const char *err_str(int err);
 
-// 日志重定向
-int log_redirect(const char *path);
+// 日志重定向，os_errno 不能为空；成功时为 0，系统调用失败时为 errno
+int log_redirect(const char *path, int *os_errno);
 
 //日志级别开关
 #ifndef LOG_LEVEL
