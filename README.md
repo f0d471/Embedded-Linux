@@ -7,7 +7,7 @@
 
 配套资料仓（只读，不要往里写东西）：
 
-    E:\Workspace\01_all_series_quickstart-master\01_all_series_quickstart-master
+    E:\Workspace\01_all_series_quickstart-master
 
 主教材（唯一的文字教程，550 页）：
 
@@ -88,8 +88,8 @@
     17      AP3216 光感传感器（I2C）    I2C 应用编程和驱动实验
     31      ICM-20608 六轴传感器        SPI/I2C 进阶
     7       2 路 USB HOST               插 USB 鼠标/键盘，作为 input 设备
-    6       USB 转串口                  调试串口
-    5       USB OTG                     adb、烧写
+    6       USB 转串口（CH9102）        调试串口，本仓上板唯一链路（左侧下面那个 micro-USB）
+    5       USB OTG                     烧写；本仓不用 ADB（左侧上面那个 micro-USB）
     12 / 13 两个百兆网口                网络编程、NFS、网络输入
     33      RTL8723 WiFi/蓝牙
     26 / 27 512MB DDR3L + 4GB eMMC
@@ -130,7 +130,9 @@
     labs/        自己动手敲的实验代码，按 章号_名字 建目录。
                  不要拷贝资料仓的源码，抄一遍等于没学。
     project/     终点整合项目。逐层长出来。
-    refs/        章节对照表、视频分集表、环境记录、板子信息。
+    tools/       上板辅助脚本。serial-board.ps1 经串口登录板子、发命令、
+                 传文件并校验 SHA-256（本仓不用 ADB）。
+    refs/        章节对照表：PDF 页码、视频分集、资料仓源码位置三者的对照。
 
 `notes/` 主线章节和 `notes/03_项目/` 的分工：前者讲"这个知识点怎么学会"，
 后者讲"这段代码为什么长这样、这一行在算什么"。同一件事在两边都出现是正常的。
@@ -148,7 +150,7 @@
     2. 文档里出现的 PASS 数、体积、行数、耗时，一律以本机或板上实测为准。
        改完代码先跑 bash project/check.sh，拿到的数字再写进文档。
 
-## 六、进度
+## 七、进度
 
     [x] 00 基础知识库  2026-09-08 全部八篇按新体例重写完毕
                        2026-09-12 开头块再修订：改成"一句话本质 -> 你从哪儿撞见它
@@ -178,8 +180,10 @@
                                    静态库动态库与符号 / 系统调用
             L4 已落地并自验：project/ 六层空壳骨架 + 两棵产物树
             工程文档已配套：TechReports 1 篇 + CodeReading 5 篇 + 路线图 1 篇
-            L1 / L2 / L3 待自己动手；ADB 上板闭环已真机验证：x86 格式错误、
+            L1 / L2 / L3 待自己动手；串口上板闭环已真机验证：x86 格式错误、
             ARM 动态版 glibc 不匹配、ARM 静态版成功，命令与退出码已写回笔记
+            上板统一走 tools/serial-board.ps1（不用 ADB）：串口登录、发命令、
+            base64 传文件并校验 SHA-256
         [ ] 02 文件 IO
             笔记：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
             read/write 是"最多"不是"正好"、O_APPEND 的原子性（并发实测）、
@@ -197,7 +201,7 @@
                              check.sh  29 PASS / 0 FAIL / 0 SKIP
             工程文档已配套：TechReports 第 02 章 + CodeReading 三篇订正
             L1 / L2 / L3 待自己动手；fd/追加/mmap/异常退出、eMMC 同步写与
-            project 日志判据均已在 ARM 真机复跑，完整步骤与输出已写回笔记
+            project 日志判据均已在 ARM 真机经串口复跑，完整步骤与输出已写回笔记
         [ ] 03 Framebuffer 显示
         [ ] 04 文字显示（ASCII / 中文 / freetype）
         [ ] 05 输入系统
