@@ -23,6 +23,15 @@ labs/00_basics/**/*
 !labs/00_basics/**/*.sh
 !labs/00_basics/**/*.md
 
+# labs/03_framebuffer/ 同样用白名单：假显存 .raw、截屏 .png、上板包都由笔记里的命令重建。
+labs/03_framebuffer/**/*
+!labs/03_framebuffer/**/
+!labs/03_framebuffer/**/*.c
+!labs/03_framebuffer/**/*.h
+!labs/03_framebuffer/**/*.sh
+!labs/03_framebuffer/**/*.py
+!labs/03_framebuffer/**/*.md
+
 # 01 章的 .bss 对照实验产物（01_ELF与程序加载 第四节），由笔记里的命令重建。
 labs/01_toolchain/big1
 labs/01_toolchain/big2

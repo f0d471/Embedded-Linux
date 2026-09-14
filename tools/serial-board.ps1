@@ -277,7 +277,8 @@ try {
         $bytes = $ms.ToArray()
         $seconds = $timer.Elapsed.TotalSeconds
 
-        $localPath = [IO.Path]::GetFullPath((Join-Path (Get-Location) $To))
+        # Combine keeps $To as is when it is already absolute; Join-Path would glue it on.
+        $localPath = [IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).Path, $To))
         [IO.File]::WriteAllBytes($localPath, $bytes)
         $hash = (Get-FileHash -LiteralPath $localPath -Algorithm SHA256).Hash.ToLowerInvariant()
         $boardHash = Get-BoardHash $Download
