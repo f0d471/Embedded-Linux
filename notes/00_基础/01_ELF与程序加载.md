@@ -274,24 +274,13 @@ ELF Header:
 
 于是同一份内容被切了两次：
 
-```
-                  同一个文件的字节流
-    +--------------------------------------------------------------+
-    |  ELF header                                                  |
-    +--------------------------------------------------------------+
-    |                                                              |
-    |             实际内容（代码、数据、符号表、字符串...）              |
-    |                                                              |
-    +--------------------------------------------------------------+
+同一个 ELF 文件可以用两套目录查看：
 
-    section 视角（29 条，链接器看）：
-    | .text | .rodata | .data | .bss | .symtab | .strtab | ...      |
-      细分到"用途"这个粒度
-
-    segment 视角（10 条，加载器看）：
-    |     LOAD (R E)      |   LOAD (RW)   |  （符号表不在任何 segment 里）
-      只按"进内存后的权限"归堆
-```
+| 视角 | 谁使用 | 如何分组 | 典型项目 |
+|---|---|---|---|
+| 文件本身 | 所有人 | ELF header 后面跟实际字节内容 | 代码、数据、符号表、字符串等 |
+| section（本例 29 条） | 链接器 | 按用途细分 | `.text`、`.rodata`、`.data`、`.bss`、`.symtab`、`.strtab` |
+| segment（本例 10 条） | 加载器 | 按映射后的内存权限归堆 | `LOAD (R E)`、`LOAD (RW)`；符号表通常不装入内存 |
 
 > **segment（段）**：可执行文件里"要装进内存的一整块"，
 > 每个 segment 就是加载器的一次 mmap。**它是加载器的操作单位**，
@@ -759,38 +748,20 @@ libc 也是 ELF，也有它自己的 LOAD segment，
 
 把前面所有证据串成一条链：
 
-```
-    ./app          shell 调 execve("./app")
-        |
-        v
-    [内核] load_elf_binary()                        <- 这就是"加载器"
-        |
-        +-- 检查 magic 是不是 7f 45 4c 46            <- 第二节 hexdump 看到的
-        +-- 检查 e_machine 是不是本机架构             <- 不对就 ENOEXEC，2.5 注错见红
-        +-- 遍历 program header：                     <- 第三节的 10 条
-        |     PT_LOAD  每条 mmap 一次，按 Flg 设权限   <- 上一篇 maps 里的 r-xp/rw-p
-        |     PT_LOAD  MemSiz 超出 FileSiz 的部分清零  <- 第四节的减法，.bss
-        |     PT_INTERP 记下解释器路径
-        |
-        +-- 有 INTERP：控制权交给 ld.so
-        |   没有（静态链接）：直接跳到 e_entry
-        v
-    [用户态] ld.so                                   <- 5.2 里那些 openat/mmap
-        +-- 读 .dynamic，看到需要 libc.so.6
-        +-- mmap libc 的每一条 LOAD segment
-        +-- 重定位：把库函数的真实地址填进表里          <- 详见 04 篇
-        v
-    _start（来自 Scrt1.o，e_entry 指向它）
-        +-- 整理 argc / argv / envp
-        v
-    __libc_start_main
-        +-- 跑构造函数（.init_array）
-        v
-    main()                                           <- 你的代码终于开始跑
-        |
-        v
-    return 3  ->  exit(3)  ->  strace 的 exited with 3
-```
+从 `./app` 到 `main()` 的顺序：
+
+1. shell 调用 `execve("./app")`。
+2. **内核态**的 `load_elf_binary()`（加载器）检查：
+   - magic 是否为 `7f 45 4c 46`；
+   - `e_machine` 是否是本机架构，不符就返回 `ENOEXEC`；
+   - 每条 `PT_LOAD` 应映射到哪里、具有什么权限；
+   - `MemSiz` 超出 `FileSiz` 的部分需要清零（`.bss`）；
+   - `PT_INTERP` 指定了哪个解释器。
+3. 有 `PT_INTERP` 时，内核把控制权交给 **用户态**的 `ld.so`；静态链接程序则直接跳到 `e_entry`。
+4. `ld.so` 读取 `.dynamic`，映射 `libc.so.6` 的各个 `LOAD` segment，并完成重定位。
+5. `e_entry` 指向来自 `Scrt1.o` 的 `_start`；它整理 `argc / argv / envp`。
+6. `__libc_start_main` 运行 `.init_array` 中的构造函数，随后才调用 `main()`。
+7. `main` 返回 3，最终成为 `exit(3)`，所以 `strace` 显示 `exited with 3`。
 
 **"程序从 main 开始"是个方便的谎言。** main 之前至少还有内核的加载、
 动态链接器的整个工作、以及 libc 的初始化。
