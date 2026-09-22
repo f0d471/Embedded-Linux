@@ -73,8 +73,7 @@
 
 | 系列 | 覆盖范围 | 篇数 |
 |---|---|---|
-| [project/](project/) | 骨架、日志落文件、判据体系 | 2 |
-| display/ | framebuffer 显示层 | 未开始 |
+| [project/](project/) | 骨架、日志落文件、display 层、判据体系 | 3 |
 | input/ | 输入层 | 未开始 |
 | font/ | 字体层 | 未开始 |
 | ui/ | 控件层 | 未开始 |

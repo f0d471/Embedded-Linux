@@ -42,8 +42,9 @@
    PDF 负责告诉你怎么做，解读负责告诉你为什么是这样、以及不这样会怎样。
    每一段开头先用第一性原理把核心压成一两句话（"编译器只是在选给谁生成机器码"、
    "make 只会比时间戳"），后面的一切都从那一句推出来。
-   能画图的地方一律配 ASCII 图，哪怕是很简单的部分。一张图省三段话，
-   而且图能把"哪一步在内核里、哪一步在用户态"这种边界画清楚。
+   需要画图时，优先用 Markdown 表格或自上而下的单列流程。一张图省三段话，
+   也能把"哪一步在内核里、哪一步在用户态"这种边界画清楚。不要用中文字符的
+   显示宽度撑边框或排多栏；这类 ASCII 图换字体或换预览器就会错位。
 
 2. 基础知识库 notes/00_基础/：主线章节里遇到的通用名词，凡是不属于本章主线、
    以后还会反复出现的（寄存器 r0/s0、ELF、sysroot、PLT/GOT、系统调用...），
@@ -156,7 +157,10 @@
                        2026-09-12 开头块再修订：改成"一句话本质 -> 你从哪儿撞见它
                        -> 它被什么逼出来 -> 关键细节"，结论条数按内容定不再写死
                        体例与四条换代理由见 notes/00_基础/README.md
-        每篇配一个 check.sh，合计 185 条判据全绿，每篇都做过注错见红。
+                       2026-09-15 为第 03 章补三篇：08 进程与信号 / 09 驱动与设备文件 /
+                       10 显示原理（起因是 03 章二十来个术语没定义就用，见 00_基础/README 问题 5）
+                       2026-09-16 为第 04 章补两篇：11 数据表示 / 12 第三方库的交叉构建与部署
+        现有十三篇各配一个 check.sh，合计 311 条判据全绿（09 篇有 11 条要 root），每篇都做过注错见红。
         一次跑全部：for d in labs/00_basics/*/; do bash "$d/check.sh"; done
 
         00 从源码到运行     新写，其余各篇的前置。四个程序的交接过程，
@@ -170,6 +174,16 @@
         05 系统调用         绕过 libc 自己发 syscall；三档缓冲实测
         06 fd 与 VFS        程序自己读 /proc/self/fdinfo，pos 是 1/0/1
         07 虚拟内存与 mmap  懒分配的定量证据；顺带测出内核的 fault-around（32 页）
+        08 进程与信号       killall 返回时进程还在（SIGTERM 后又活 2 秒）；exit(139) 和段错误
+                            在 $? 上一样、waitpid 状态字不一样；WSL 里孤儿归 Relay 不归 1 号
+        09 驱动与设备文件   自己 mknod 出 null/zero/full；ENXIO/ENODEV/nodev 三种打不开；
+                            fb 的 ioctl 请求码不带结构体大小
+        10 显示原理         软件模拟扫描，帧率和板上 fbset、内核 CEA 表逐项对账；
+                            电脑注册表里的 EDID 解出来和板上模式清单 18 行逐行相同
+        11 数据表示         同两个字节按大小端解释出不同数；同一字节按 MSB/LSB-first
+                            画出镜像点阵；用 26.6 定点数保住亚像素精度
+        12 第三方库         分开复现编译/链接/运行三种失败；隔离交叉构建 FreeType 2.10.2，
+                            用 ELF Machine 和 SONAME 链验收 ARM staging
 
     [ ] 阶段 1  应用编程   PDF 141-300
         [ ] 01 工具链与构建系统（HelloWorld / GCC / Makefile）
@@ -216,8 +230,35 @@
             插 HDMI 后实测：sii902x 把模式从 1024x600x32 改成 1280x720x16 60Hz，
             彩条回读八种颜色计数与推算值逐项相等，显示器上颜色顺序和四边白框肉眼确认无误；
             拔掉显示器后是否变回 1024x600x32 未测
-            fbinfo / 假显存描点 / 按位段拼色 / L4 display 层 待自己动手
-        [ ] 04 文字显示（ASCII / 中文 / freetype）
+            2026-09-15 重排：主线改成一条直线（写内存 -> 像素位置 -> 颜色 -> 上板 -> 插 HDMI
+            -> display 层），内核源码深挖挪到末尾延伸 A-D，各节开头标明先读哪篇基础；
+            修正 2.2 节 mknod 原来写在 /mnt/e 下做（Windows 盘不支持设备文件，照做必失败）
+            L4 已落地并自验：display 层注册链表 + 真假两个后端（mmap /dev/fb0 与 malloc
+                             假显存）+ 画点填矩形 + unittest/disp_test 与两个独立计数脚本；
+                             check.sh  52 PASS / 0 FAIL / 0 SKIP（判据 29 -> 52）
+            工程文档已配套：TechReports 第 03 章 + CodeReading 新增 display 层一篇、
+                            层管理器空壳 / Makefile / check 三篇订正
+            display 层已上板（2026-09-22，未接显示器那一组）：停掉 mxapp2 之后
+            disp_test 报 mode 1024x600x32 line_length 4096 与 fbset 一致；
+            dd 读回一屏交给板上的 count.sh 数，计数与坐标和电脑上用假显存
+            预演的那组逐项相等（614359 / 12 / 12 / 12 / 4 / 1，板上计数耗时 41.6 秒）；
+            连跑两次 dd 的 sha256 相同；product_tool 走真 fb 后端 13 行退出码 0
+            坑：交叉工具链的 glibc 比板上新（2.41 vs buildroot 2.30），动态产物
+            报 GLIBC_2.38 not found 起不来，要 make LDFLAGS=-static（72 KB -> 495 KB）
+            fbinfo / 假显存描点 / 按位段拼色 待自己动手；插 HDMI 那组待测
+        [ ] 04 文字显示（ASCII / 中文 / FreeType）
+            笔记已按 5 集字幕、PDF 182-215 页和配套源码重写：字符身份与字形分层、
+            UTF-8 严格解码、ASCII/HZK16 点阵寻址、FreeType 灰度覆盖图、
+            baseline/bbox/advance/26.6 排版、framebuffer alpha 合成与 font 层契约
+            教材勘误已就地标出：UTF-16 代理对、ANSI 不是固定编码、line_length/pitch、
+            灰度字节不是蓝色、fexec-charset 与 wchar_t 的边界
+            本机自动实验：labs/04_text 24 PASS；基础 11/12 各 13 PASS；
+            FreeType 2.10.2 已真实交叉构建为 ARM EABI5，fbtext 静态 ARM 产物已验 ELF
+            2026-09-16 串口真机闭环完成：CH9102/COM8 上传整文件 SHA-256 一致；
+            32bpp Ag 的 covered=written=nonblack=2162、bbox=(40,66)..(130,138)、217 色；
+            A中g 为 3 glyph / 0 缺字，3650 个非黑像素；BUG_NO_ALPHA 后颜色从 217 降到 2；
+            临时切到 RGB565 后 stride=2048、回读 1228800 字节，21 个低覆盖像素量化为黑；
+            实验结束已恢复 32bpp 并重启 mxapp2。L4 font 层仍留作自己动手
         [ ] 05 输入系统
         [ ] 06 网络通信
         [ ] 07 多线程

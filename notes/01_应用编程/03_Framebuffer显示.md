@@ -4,51 +4,63 @@
     视频    4_5-1 一集，14 分钟。字幕在 E:\Workspace\Temp\新建文件夹\
             （同一个文件夹里另外 5 集是第 04 章文字显示的），分集表见 refs/章节对照表.md
     源码    $Q\04_嵌入式Linux应用开发基础知识\source\07_framebuffer\show_pixel.c
-    产出    project/ 的 display 层 —— 这一层由你自己写，本章第 6 节只给规格和验收判据
+    产出    project/ 的 display 层 —— 这一层由你自己写，本章第 7 节只给规格和验收判据
 
 ---
 
 ## 0 这份笔记怎么用
 
-### 0.1 定位：PDF 8 页、视频 14 分钟，真正新的只有两件事
+### 0.1 这一章在做什么
 
-这一章的 8 页 PDF 里，有 3 页是 `open` / `ioctl` / `mmap` 的手册抄录，
-上一章已经讲透。视频 14 分钟，其中 1 分钟在总结这三个函数。
-剩下的内容压缩一下，只有两件事是新的：
+> **屏幕上的每个像素，在内存里都有几个字节和它对应。改这几个字节，屏幕就变。**
+> 这块内存叫 framebuffer（帧缓冲），`/dev/fb0` 是通往它的那扇门。
 
-    1. 显示 = 往一块内存里写。有一个硬件在不停地读这块内存，送到屏幕上
-    2. 屏幕上的 (x, y) 对应这块内存的哪几个字节，这几个字节怎么拼出颜色
+这一章的 8 页 PDF 里，有 3 页是 `open` / `ioctl` / `mmap` 的手册抄录，上一章已经讲过。
+视频 14 分钟，其中 1 分钟在总结这三个函数。剩下真正新的只有两件事：
 
-这两件事都不难，所以这一章的份量不在"讲清楚"，而在"验清楚"。
-PDF 和视频都停在"屏幕上出现一条红线"，但板子上有几件事它们没说，
-不知道的话，你写的程序会时灵时不灵：
+    1. 屏幕上的 (x, y) 对应这块内存的哪几个字节
+    2. 这几个字节怎么拼出一个颜色
 
-- 出厂系统里有个 GUI 一直开着，它也在往同一块内存里写（第 5.1、5.2 节）
-- 显存有 32 MiB，一屏只有 2.4 MiB，`cat /dev/fb0` 读出来的是前者（第 8 节坑 6）
-- 从显存里**读**比往显存里**写**慢 10 倍（第 5.5 节）
-- 插上 HDMI 显示器，驱动会按显示器的能力改分辨率，本板实测连 bpp 都从 32 变成了 16（第 5.6 节）
-- PDF 说 `fb_fix_screeninfo`"很少用到"，但行宽和显存大小都在它里面（第 2.3、3.3 节）
+这两件事都不难。PDF 和视频都停在"屏幕上出现一条红线"，
+**这一章的份量在"验清楚"**：不看屏幕，把显存读回来数像素，判断画得对不对。
 
-还有一件事决定了这一章怎么做实验：**WSL 里没有 `/dev/fb0`**（第 2.2 节实测），
-所以本章分两条腿走：
+WSL 里没有 `/dev/fb0`，所以本章分两条腿走：
 
     电脑上   用一个普通文件冒充显存，练地址公式和颜色拼法（第 3、4 节）
-    板子上   跑真的 /dev/fb0，用回读显存来验证（第 5 节）
+    板子上   跑真的 /dev/fb0，用回读显存来验证（第 5、6 节）
 
-回读是这一章最值钱的方法：**不看屏幕也能判对错**。
-把显存读回来数红色像素有几个、在哪个位置，比盯着显示器看一条线准得多。
+**读之前先补三篇基础。** 这一章会用到一批前面没讲过的词，它们单独成篇放在 `notes/00_基础/`：
+
+    [基础 10] 显示原理        显示控制器、像素时钟、空白和同步、帧率、HDMI、EDID     读第 2 节之前
+    [基础 09] 驱动与设备文件  驱动、设备号、/sys、dmesg、ioctl 请求码               读第 2.2 节之前
+    [基础 08] 进程与信号      PID、ps / pidof、kill 只递通知、启停脚本              读第 5 节之前
+
+另外还会用到上一章配套的 [基础 06] 文件描述符与 VFS、[基础 07] 虚拟内存与 mmap。
+
+**这一章的路线：**
+
+    第 2 节  /dev/fb0 背后是谁；从驱动那里问出分辨率、行宽、颜色格式
+    第 3 节  (x, y) 在内存的哪个位置                        电脑上，假显存
+    第 4 节  颜色怎么拼                                    电脑上，假显存
+    第 5 节  上板：出厂 GUI 也在写显存，先停掉它；截屏；读写速度
+    第 6 节  插上 HDMI 显示器以后，什么变了
+    第 7 节  project 的 display 层（你自己写）
+    延伸     几处"为什么"的内核源码分析，选读，不影响主线
+
+**第 2 到第 5 节的板上数据，全部是没插显示器时测的**（1024x600、每像素 32 位）。
+插上显示器以后模式会变，集中放在第 6 节，前面不穿插。
 
 ### 0.2 过滤表：1 集视频看什么、跳什么
 
 | 集 | 时间段 | 看不看 | 内容 |
 |---|---|---|---|
-| 4_5-1 | 0:08-1:47 | **重点** | framebuffer 是一块内存，LCD 控制器"周而复始"地从头读到尾。本笔记第 2.1 节 |
+| 4_5-1 | 0:08-1:47 | **重点** | framebuffer 是一块内存，LCD 控制器"周而复始"地从头读到尾。本笔记第 2.1 节、[基础 10] 第一节 |
 | | 1:47-3:43 | **看** | 从 (x, y) 推出偏移：前面有 y 行，这一行前面有 x 个。本笔记第 3.1 节 |
 | | 3:57-5:20 | **看** | 32/24/16 bpp 三种颜色格式，24bpp 实际也占 4 个字节。本笔记第 4.1 节 |
 | | 5:20-6:31 | 快进 | 总结 open / ioctl / mmap。02 章讲过 |
 | | 6:51-7:54 | **重点** | 可变参数和固定参数；`fb_bitfield` 的 offset/length。他说"我们没有去看 bitfield，用惯例" —— 本笔记第 4.3 节就是不用惯例的写法 |
-| | 7:54-8:34 | **看** | `FBIOPUT_VSCREENINFO` 能改分辨率，"嵌入式里一般不这么做" —— 本板插 HDMI 时驱动自己会改，见第 5.6 节 |
-| | 8:34-9:19 | **看** | mmap 的大小 = xres × yres × bpp / 8。本笔记第 3.4、5.4 节讲这个数和 `smem_len` 不是一回事 |
+| | 7:54-8:34 | **看** | `FBIOPUT_VSCREENINFO` 能改分辨率，"嵌入式里一般不这么做" —— 本板插 HDMI 时驱动自己会改，见第 6 节 |
+| | 8:34-9:19 | **看** | mmap 的大小 = xres × yres × bpp / 8。本笔记第 3.4 节、第 9 节坑 6 讲这个数和 `smem_len` 不是一回事 |
 | | 9:19-11:16 | **看** | 描点函数的推导，`line_width` 和 `pixel_width` 两个量 |
 | | 11:16-13:06 | **重点** | 888 转 565：红取高 5 位、绿取高 6 位、蓝取高 5 位。本笔记第 4.2 节 |
 | | 13:06-14:01 | 看结果 | 上机：整屏清白 + 中间一条红线。他用 NFS 跑，本仓走串口（第 5 节） |
@@ -109,7 +121,7 @@ RETURN VALUE
 本章的测量探针（结构体大小、越界、读写计时、截屏转图片）放在
 `labs/03_framebuffer/probe/`，它们不是本章要你学会写的东西，是量数据用的工具，
 直接编直接用。要你自己写的是 `fbinfo`（第 2.3 节）、假显存上的描点（第 3.2 节）、
-按位段拼色（第 4.3 节）和 project 的 display 层（第 6 节）。
+按位段拼色（第 4.3 节）和 project 的 display 层（第 7 节）。
 
 ### 0.5 环境
 
@@ -135,29 +147,31 @@ Linux 100ask 4.9.88 #1 SMP PREEMPT Sun Jul 21 03:42:00 EDT 2024 armv7l GNU/Linux
 第 3 节的假显存实验会生成几个 2.4 MiB 的 `.raw` 文件，
 在 `/mnt/e` 下做也可以（这一章不涉及稀疏文件），只是慢一点。
 
+**只有第 2.2 节造设备文件那一步例外，必须在 WSL 自己的目录里做**（本章用 root 的 `~/fblab`）。
+`/mnt/e` 是 Windows 盘，不支持设备文件，`mknod` 直接报 `Operation not supported`；
+`/tmp` 挂载时带了 `nodev`，建出来也打不开（[基础 09] 第四节实测）。
+
 ---
 
 ## 1 一张脉络图
 
-```text
-  用户态                                  内核                         硬件
-  -------------------------------------  ---------------------------  ---------------------------------
-  你的程序                                                              DDR 里一段 32 MiB 的内存
-    fd = open("/dev/fb0")  ---------->   主设备号 29 -> fb 核心           物理地址 0x8c100000
-                                          次设备号 0  -> mxsfb 驱动实例      ^                 |
-    ioctl(fd, FBIOGET_VSCREENINFO) --->   把 var / fix 拷给你             |                 | LCDIF 控制器
-                                          (分辨率/bpp/行宽/显存地址)       |                 | 每秒读 58.586 遍
-    p = mmap(fd, ...)  -------------->   把那段物理内存映射进你的地址空间  |                 v
-                                                                         |        RGB 并行信号
-    p[offset] = 颜色  ============================= 直接写内存 =========+                 |
-                      (这一步没有系统调用，内核完全不参与)                              SiI9022 (I2C 1-0039)
-                                                                                           |
-                                                                                         HDMI -> 显示器
-```
+从应用写一个像素到显示器看到它，分为两条路径：
+
+| 路径 | 顺序 | 发生什么 |
+|---|---|---|
+| 建立映射 | 1 | 用户态 `open("/dev/fb0")`；设备号 `29:0` 选中 fb 核心的 `mxsfb` 第 0 个实例 |
+| 建立映射 | 2 | `ioctl(FBIOGET_VSCREENINFO)` 等调用把分辨率、bpp、行宽和显存地址复制到用户态 |
+| 建立映射 | 3 | `mmap` 把 DDR 中从物理地址 `0x8c100000` 开始的 32 MiB 显存映射进进程地址空间 |
+| 写像素 | 4 | `p[offset] = 颜色` 直接写映射后的内存；这一步没有系统调用，内核不参与 |
+| 扫描输出 | 5 | LCDIF 每秒扫描显存 58.586 遍，输出并行 RGB |
+| 扫描输出 | 6 | SiI9022（I²C `1-0039`）转换为 HDMI，显示器呈现画面 |
 
 图里最重要的是那条双线：**写像素这一步不经过内核**。
 `open`、`ioctl`、`mmap` 各进一次内核，之后每秒画几百万个像素，一次系统调用都不发。
 屏幕能跟上，是因为右边那个控制器自己在不停地读。
+
+图的左半边（设备号怎么找到驱动）是 [基础 09]，右半边（控制器怎么读、为什么是 58.586 遍、
+HDMI 那颗芯片）是 [基础 10]。本章只用它们的结论。
 
 三条贯穿全章的线：
 
@@ -166,7 +180,7 @@ Linux 100ask 4.9.88 #1 SMP PREEMPT Sun Jul 21 03:42:00 EDT 2024 armv7l GNU/Linux
 3. **颜色是几个位段拼起来的**，第 4 节。位段在哪、多宽，驱动也告诉你了。
 
 第 5 节在真板子上把三条线跑一遍，顺带处理"这块内存不止你一个人在写"。
-第 6 节是 project 的 display 层，你自己写。
+第 6 节插上显示器。第 7 节是 project 的 display 层，你自己写。
 
 ---
 
@@ -177,55 +191,48 @@ Linux 100ask 4.9.88 #1 SMP PREEMPT Sun Jul 21 03:42:00 EDT 2024 armv7l GNU/Linux
     PDF     174-175 页（5.1），图 5.1
     视频    4_5-1 的 0:08-1:47，以及 6:51-8:34（两类参数）
     源码    show_pixel.c 第 73-93 行
-    基础    [基础 06] notes/00_基础/06_文件描述符与VFS.md 第七节（f_op 分发）
+    基础    [基础 10] 显示原理 第一至三节（控制器、像素时钟、空白和同步、帧率）
+            [基础 09] 驱动与设备文件 第二至四节（设备号、ENODEV）、第六节（ioctl 请求码）
+            [基础 06] notes/00_基础/06_文件描述符与VFS.md 第七节（f_op 分发）
             [基础 07] notes/00_基础/07_虚拟内存与mmap.md（MAP_SHARED）
-            [基础 03] notes/00_基础/03_ABI与sysroot.md（类型大小跟着平台走）
 
 ### 2.1 第一性原理：有一个硬件在不停地读这块内存
 
-屏幕是一张像素网格。每个像素要亮成什么颜色，必须有人每秒告诉它几十遍 ——
-液晶和 HDMI 线都不会"记住"上一帧。
+屏幕自己记不住画面，每个像素要亮成什么颜色，必须有人每秒告诉它几十遍。
 
-干这件事的是 SoC 里的**显示控制器**（i.MX6ULL 上叫 LCDIF）。它的工作只有一句话：
+干这件事的是 SoC 里的**显示控制器**（i.MX6ULL 上叫 LCDIF）。它的工作只有一句话
+（[基础 10] 第一节把它写成了两个计数器）：
 
 > 按固定节拍，从内存里某个地址开始，一个像素一个像素往后读，读到一帧末尾就回到开头。
 
 所以只要驱动把"从哪个地址开始读、读多宽多高、每个像素几位"告诉控制器，
 应用程序想改屏幕，**改那块内存就行了**。这块内存就叫 framebuffer（帧缓冲）。
 
-```text
-    内存（framebuffer）                          显示控制器                    屏幕
-    +------+------+------+-----+------+          +----------------+          +--------+
-    | 像素0 | 像素1 | 像素2 | ... | 像素N |  <----  | 读指针从头走到尾 |  ---->   | 一帧   |
-    +------+------+------+-----+------+          | 走完回到开头    |          +--------+
-        ^                                         +----------------+
-        |                                          节拍 = 像素时钟
-    你的程序改这里                                  本板 50 MHz
-```
+| 部件 | 动作 |
+|---|---|
+| 你的程序 | 修改 framebuffer 中的像素 0、像素 1……像素 N |
+| 显示控制器 | 按像素时钟从头读到尾，走完再回到开头 |
+| 屏幕 | 接收这一轮扫描，形成一帧；下一轮继续刷新 |
 
 这里藏着一个结论，第 5 节会反复用到：**控制器不管是谁写的**。
 你写、GUI 写、内核控制台写，它都照读不误。谁最后写，屏幕上就是谁的。
 
-节拍是多少，第 2.5 节会从驱动给的时序参数里算出来：本板每秒 58.586 帧。
+本板每秒读 58.586 遍，这个数怎么从驱动给的参数算出来，第 2.3 节自己算一遍。
 
 ### 2.2 [做 L1] /dev/fb0 是怎么找到驱动的
 
-**先自己想：** 上一章说"一切皆文件"，`open` 的时候内核按你打开的东西往 `f_op`
-里填不同的函数表（[基础 06] 第七节）。那 `/dev/fb0` 这个文件本身里存了什么，
-能让内核知道该填显示驱动的表？WSL 里没有 `/dev/fb0`，你自己造一个同名文件行不行？
+**先读 [基础 09] 第二至四节。** 那里用 `/dev/null` 这些不需要硬件的设备讲清楚了：
+设备文件里只存类型和主、次两个设备号，主设备号选驱动、次设备号选实例；
+号码没人登记报 `ENXIO`，登记了但没有这个实例报 `ENODEV`。本节把同样的事放到 `fb0` 上看一遍。
 
-线索：`ls -l` 看设备文件时，大小那一列会变成两个数；`/proc/devices` 列出了
-内核里登记过的设备号；造设备文件的命令是 `mknod`。
+**先自己想：** 板子上的 `/dev/fb0` 归哪个驱动、背后是哪块硬件？
+WSL 里照着板子上的号码造一个同款节点，`open` 会报哪个 errno？
 
 **先在板子上看。** Windows PowerShell 里：
 
 ```powershell
 .\tools\serial-board.ps1 'ls -l /dev/fb*; grep -n fb /proc/devices; ls /sys/class/graphics/; ls -l /sys/class/graphics/fb0/device'
 ```
-
-- `grep -n fb /proc/devices`：`/proc/devices` 是内核里"设备号 -> 名字"的登记表。
-- `/sys/class/graphics/`：内核按"类"组织设备，显示类的设备都在这下面。
-- `.../fb0/device`：一个符号链接，指向这个 fb 背后真正的硬件设备。
 
 **本次上板实测：**
 
@@ -239,28 +246,22 @@ lrwxrwxrwx 1 root root 0 Jan  1 00:04 /sys/class/graphics/fb0/device -> ../../..
 
 逐列读：
 
-- 权限前面那个 `c`：**字符设备**。普通文件是 `-`，目录是 `d`。
-- 大小那一列变成了 `29, 0`：这不是大小，是**主设备号 29、次设备号 0**。
-- `/proc/devices` 里 29 号登记的名字就是 `fb`。
+- `c`、`29, 0`：字符设备，主设备号 29、次设备号 0。`/proc/devices` 里 29 号登记的名字是 `fb`。
 - `fb0` 的 `device` 链接指向 `21c8000.lcdif`：物理地址 `0x021c8000` 上那个 LCDIF 控制器。
+  管它的驱动叫 `mxsfb`，第 6.1 节 `dmesg` 里它会自报家门。
 - 有两个 fb：`fb0` 和 `fb1`，次设备号 0 和 1。`fb1` 是什么，第 2.3 节问出来。
+- `fbcon` 不是显示设备，是内核用 framebuffer 画文字终端的那部分代码（[基础 09] 第四节）。
 - 权限是 `rw-rw----`、属组 `video`：**普通用户不在 video 组就打不开**。
   本板串口登录的是 root，所以本章不受影响。
 
-> **设备号**：设备文件里存的不是数据，是两个数。**主设备号**选"哪个驱动"，
-> **次设备号**选"这个驱动管的第几个设备"。`open` 时内核拿主设备号找到那个驱动的
-> `file_operations` 表，填进 `struct file` 的 `f_op`。
-
-所以设备文件的名字叫 `fb0` 还是叫 `abc` 都无所谓，内核认的是那两个数。
-
-**再到 WSL 里验证"只有号码没有驱动实例"会怎样。** 这一步要 root，
-因为 `mknod` 造设备文件是特权操作。在 **Windows PowerShell** 里用 `wsl -u root` 进去
-（WSL 里的 `sudo` 要密码，这是免密的写法）：
+**再到 WSL 里造一个同款节点。** 这一步要 root，从 **Windows PowerShell** 用 `wsl -u root` 进去
+（WSL 里的 `sudo` 要密码，这是免密的写法）。**注意在 `~/fblab` 里做，不要在仓库目录下做**（第 0.5 节）：
 
 ```bash
 ls -l /dev/fb*
 grep -n ' fb$' /proc/devices
 ls /sys/class/graphics/
+mkdir -p ~/fblab && cd ~/fblab
 mknod fb_fake c 29 0          # c: 字符设备  29: 主设备号  0: 次设备号
 ls -l fb_fake
 ```
@@ -269,7 +270,8 @@ ls -l fb_fake
 对每个路径打印 `open` 和 `ioctl` 的 errno）：
 
 ```bash
-gcc -Wall -o fbopen probe/fbopen.c
+L=/mnt/e/Workspace/embedded-linux/labs/03_framebuffer
+gcc -Wall -o fbopen $L/probe/fbopen.c
 ./fbopen fb_fake
 ```
 
@@ -306,9 +308,7 @@ data.txt               ioctl 失败 errno=25 Inappropriate ioctl for device
 /dev/zero              ioctl 失败 errno=25 Inappropriate ioctl for device
 ```
 
-`open` 成功、`ioctl` 失败，errno 是 25 `ENOTTY`。`man 2 ioctl` 的 ERRORS 一节
-（本机实测）写的就是"The specified operation does not apply to the kind of object
-that the file descriptor fd references"。和 [基础 06] 第 7.4 节 `TIOCGWINSZ` 那组实验是同一回事：
+`open` 成功、`ioctl` 失败，errno 是 25 `ENOTTY`：这个驱动不认这个请求码（[基础 09] 第六节）。
 **`FBIOGET_VSCREENINFO` 只有 fb 驱动的表里有人接。**
 
 两个 errno 要分清：
@@ -338,16 +338,17 @@ PDF 说"编写应用程序时主要关心可变参数，固定参数很少用到
     第 3 步  把 fix 的 id / smem_start / smem_len / line_length，
              var 的 xres / yres / xres_virtual / yres_virtual / bits_per_pixel /
              red/green/blue/transp 的 offset 和 length 全打出来
-    第 4 步  打三笔对账（下面第 2.5 节要用）：
+    第 4 步  打三笔对账（下面第 2.4 节要用）：
              行宽  xres*bpp/8 和 line_length 比
              大小  xres*yres*bpp/8 和 smem_len 比
              刷新  用时序参数算帧率
 
 第 4 步里帧率的算法：
 
-> **像素时钟**：控制器每读一个像素走一拍，`var.pixclock` 是一拍的长度，单位皮秒。
-> 一行不只 `xres` 个像素，前后还有消隐（`left_margin`、`right_margin`）和同步脉冲
-> （`hsync_len`），这些拍控制器也要走。纵向同理。
+> 一行不只 `xres` 个像素，画面后面还有空白（`right_margin`）、行同步（`hsync_len`）、
+> 同步之后又有空白（`left_margin`），这些拍控制器也要走，纵向同理。
+> 为什么会有这些空白和同步、每个参数在一行里排在哪，见 [基础 10] 第二节；
+> `var.pixclock` 是像素时钟一拍的长度，单位皮秒。
 
 ```text
     一行的总拍数   htotal = xres + left_margin + right_margin + hsync_len
@@ -379,6 +380,11 @@ arm-linux-gnueabihf-gcc -static -O2 -Wall -Wextra -o board/fbinfo fbinfo.c
 - `-static`：板上 glibc 2.30 比工具链的旧，动态版跑不起来。
 - `-Wextra`：比 `-Wall` 再多开一批警告，比如"有符号和无符号比较"，
   这一章满地都是 `__u32`，这类警告很有用。
+
+**为什么必须分别编 x86 版和 ARM 版，而不能拿 x86 的结果推 ARM**：
+`fb_fix_screeninfo` 在 x86-64 上 80 字节、ARM 上 68 字节，而 fb 的请求码里不带结构体大小
+（[基础 09] 第六节），用错了平台的头文件，内核发现不了，程序只会读到错位的数据。
+怎么在 WSL 里不运行程序就量出两个平台的大小，见延伸 A。
 
 **本机实测**（报错分支）：
 
@@ -424,99 +430,31 @@ exit=1
 - **`id=mxs-lcdif`**：驱动名。`fb1` 叫 `FG`（foreground，前景层），
   它有自己的 32 MiB 显存，而且多了 `transp=24/8` —— 高 8 位是透明度。
   本章只用 `fb0`，`fb1` 知道它存在就行。
-- **`smem_start=0x8c100000`**：显存的**物理地址**。你的程序拿不到物理地址，
+- **`smem_start=0x8c100000`**：显存的**物理地址**。你的程序拿不到物理地址（[基础 07]），
   这个数第 5.1 节用来对账。
 - **`smem_len=33554432`**：显存 32 MiB，是一屏（2457600 字节）的 13.65 倍。
-  **驱动分的比一屏大得多。** 第 3.4 节和第 8 节坑 6 都要用到这个数。
+  **驱动分的比一屏大得多。** 第 3.4 节和第 9 节坑 6 都要用到这个数。
 - **`line_length=4096`**：一行 4096 字节，恰好等于 1024 × 4。
 - **`bpp=32`，`red=16/8 green=8/8 blue=0/8 transp=0/0`**：32 位里，
   红在第 16 位起 8 位，绿第 8 位起 8 位，蓝第 0 位起 8 位，高 8 位不用。
   这就是 PDF 图 5.3 那个 RGB888 的布局，第 4.1 节画图。
 - **`pixclock=20000`**：一拍 20000 皮秒 = 20 纳秒，也就是 50 MHz。
+  **一行 1344 拍里只有 1024 拍是画面**，其余是空白和同步，[基础 10] 第三节把这组数原样抄进模拟程序跑过一遍。
 
 回头看 PDF 那句"固定参数很少用到"：行宽 `line_length`、显存大小 `smem_len`
 都在固定参数里。**描点公式要行宽，截屏要知道只读多少，这两个数少一个都会出事**
-（第 3.3 节、第 8 节坑 6）。那句话只在"行宽恰好等于 xres × bpp/8、
+（第 3.3 节、第 9 节坑 6）。那句话只在"行宽恰好等于 xres × bpp/8、
 从来不截屏"时成立。
 
-### 2.4 同一个结构体，x86 和 ARM 上不一样大
-
-`fbinfo` 要分别编 x86 版和 ARM 版，还有一个理由：**这两个结构体在两个平台上的布局不一样。**
-
-**先自己想：** `fb_fix_screeninfo` 里 `smem_start` 的类型是 `unsigned long`。
-x86-64 和 32 位 ARM 上 `long` 各几个字节？这会让后面每个字段的偏移怎么变？
-
-板子上跑不了"打印 sizeof 的程序"之外的招，而我们想在 WSL 里一次看两个平台。
-[基础 03] 用过一个办法：**让编译器把大小变成数组长度，再用 `nm -S` 读符号大小**，
-不用运行程序。`labs/03_framebuffer/probe/fbabi.c`：
-
-```c
-char var_size[sizeof(struct fb_var_screeninfo)];
-char fix_size[sizeof(struct fb_fix_screeninfo)];
-char fix_smem_len_off[offsetof(struct fb_fix_screeninfo, smem_len)];
-char fix_line_length_off[offsetof(struct fb_fix_screeninfo, line_length)];
-char var_bpp_off[offsetof(struct fb_var_screeninfo, bits_per_pixel)];
-```
-
-```bash
-gcc -c probe/fbabi.c -o fbabi_x86.o && nm -S --defined-only fbabi_x86.o
-arm-linux-gnueabihf-gcc -c probe/fbabi.c -o fbabi_arm.o && nm -S --defined-only fbabi_arm.o
-```
-
-- `-c`：只编译不链接，拿到 `.o` 就够了。
-- `nm -S`：在地址后面多打一列**符号大小**，这一列就是数组长度。
-- `--defined-only`：只列本文件定义的符号。
-
-**本机实测**（前 5 行是 x86-64，后 6 行是 ARM；第二列是十六进制大小；
-`nm` 默认按符号名排序）：
-
-```text
-0000000000000120 0000000000000030 B fix_line_length_off
-00000000000000a0 0000000000000050 B fix_size
-00000000000000f0 0000000000000018 B fix_smem_len_off
-0000000000000150 0000000000000018 B var_bpp_off
-0000000000000000 00000000000000a0 B var_size
-00000000 b $d
-000000f8 0000002c B fix_line_length_off
-000000a0 00000044 B fix_size
-000000e4 00000014 B fix_smem_len_off
-00000124 00000018 B var_bpp_off
-00000000 000000a0 B var_size
-```
-
-ARM 那边多出来的 `$d` 是 ARM ELF 的**映射符号**，标记"从这里开始是数据不是指令"，
-给反汇编器用的，没有大小，不用管。
-
-换成十进制：
-
-| | x86-64 | ARM |
-|---|---|---|
-| `sizeof(fb_var_screeninfo)` | 160 | 160 |
-| `sizeof(fb_fix_screeninfo)` | **80** | **68** |
-| `smem_len` 的偏移 | 24 | 20 |
-| `line_length` 的偏移 | 48 | 44 |
-| `var.bits_per_pixel` 的偏移 | 24 | 24 |
-
-`var` 全是 `__u32`，两边一样大；`fix` 里有两个 `unsigned long`（`smem_start` 和
-`mmio_start`），x86-64 上 8 字节、ARM 上 4 字节，于是从 `smem_len` 往后每个字段都挪了位置。
-`smem_len` 的偏移 24 = `id[16]` 的 16 + `smem_start` 的 8；ARM 上 20 = 16 + 4。
-
-这件事的工程含义：**请求码里不带结构体大小**。`fb.h` 里
-`#define FBIOGET_FSCREENINFO 0x4602`，就是一个裸数字。
-所以结构体布局对不对，全靠你编译时用的头文件和目标平台一致。
-交叉编译用 `arm-linux-gnueabihf-gcc` 就会自动用它自己 sysroot 里的头文件
-（[基础 03]），不要手工 `-I` 到 x86 的 `/usr/include` 去。
-
-### 2.5 [判] 第 2 节的判据
+### 2.4 [判] 第 2 节的判据
 
 ```text
     [ ] WSL: /proc/devices 有 29 fb，/sys/class/graphics 下没有 fb0
-    [ ] WSL: mknod c 29 0 造出的节点 open 报 errno=19，对普通文件 ioctl 报 errno=25
+    [ ] WSL: 在 ~/fblab 里 mknod c 29 0 造出的节点 open 报 errno=19，对普通文件 ioctl 报 errno=25
     [ ] 板上 fbinfo 打出的 line_length 等于 sysfs 的 stride
         (cat /sys/class/graphics/fb0/stride，本板 4096)
     [ ] 板上 fbinfo 算出的帧率等于 fbset 报的 V: 频率（本板 58.586 Hz）
     [ ] 板上 fbinfo 的 smem_start 等于 fbset -i 的 Address（本板 0x8c100000）
-    [ ] fbabi 的 nm -S 结果：fix 在 x86-64 上 80 字节、ARM 上 68 字节
 ```
 
 后三条是**对账型**：同一个数从两条独立的路拿到，必须相等。
@@ -558,7 +496,7 @@ Frame buffer device information:
 `pixclock left right upper lower hsync vsync`，和 `fbinfo` 打出的也逐个相等。
 
 **注错见红：** 在 `fbinfo.c` 算完 `htotal`/`vtotal` 之后加两段 `#ifdef`：
-`BUG_VTOTAL` 把 `vtotal` 改成 `var.yres`（忘了纵向消隐和同步），
+`BUG_VTOTAL` 把 `vtotal` 改成 `var.yres`（忘了纵向空白和同步），
 `BUG_HVTOTAL` 把 `htotal`、`vtotal` 都改成分辨率。编两个注错版一起传上板：
 
 ```bash
@@ -604,18 +542,15 @@ arm-linux-gnueabihf-gcc -static -O2 -Wall -Wextra -DBUG_HVTOTAL -o board/fbinfo_
     整整 y 行          每行 line_length 个字节
     这一行里 x 个像素  每个 bpp/8 个字节
 
+定位 `(x, y)` 像素分两步：
+
+1. 从 `fb_base` 跳过 `y` 个完整行，每行是 `line_length` 字节：`y * line_length`。
+2. 在第 `y` 行内跳过 `x` 个像素，每像素 `bpp / 8` 字节：`x * (bpp / 8)`。
+
+所以：
+
 ```text
-    fb_base
-    |
-    v
-    +------ 第 0 行: line_length 字节 -------------------------+
-    +------ 第 1 行 ------------------------------------------+
-    ...
-    +------ 第 y 行 --------+---+------------------------------+
-    |<--- x 个像素 -------->| * |
-    |   x * (bpp/8) 字节     |
-                           ^
-            偏移 = y * line_length + x * (bpp/8)
+offset = y * line_length + x * (bpp / 8)
 ```
 
 ```text
@@ -697,7 +632,11 @@ od -An -tx1 -j "$off" -N 4 fb.raw
 ```
 
 最后一行值得停下来看：`put_pixel` 写进去的是整数 `0x00FF0000`，
-文件里按顺序存的却是 `00 00 ff 00`。x86 和 ARM 都是**小端**：整数的最低字节放在最前面。
+文件里按顺序存的却是 `00 00 ff 00`。
+
+> **小端（little endian）**：一个多字节整数在内存里，最低的那个字节放在最前面（地址最小处）。
+> x86 和本板的 ARM 都是小端。
+
 所以一个 32bpp 像素在内存里的顺序是 **B G R x**。第 5.4 节转图片时要用到这一条。
 
 ### 3.3 行宽为什么要用 line_length
@@ -821,12 +760,12 @@ beyondy exit=139
 - **x 越界不报错，点跑到下一行开头。** 这比崩溃更糟：程序"正常"，屏幕左边缘多出一个点。
   画一个跨过右边界的矩形，右边露出去的部分会从左边冒出来。
 - **y 越界：写的地址恰好是映射区的结尾**（`0x76f70000` 就是上一行打印的区间终点），
-  收到 `SIGSEGV`，退出码 139 = 128 + 11。
+  收到 `SIGSEGV`，退出码 139 = 128 + 11（为什么是 128 + 11，见 [基础 08] 第三节）。
 - **板上显存明明有 32 MiB，照样段错误。** 能不能访问看的是**你映射了多少**，
   不是物理上有多少。映射区外面的虚拟地址在页表里没有登记（[基础 07]）。
 
 所以描点函数要么在里面查边界，要么调用它的人保证不越界。
-project 的 display 层选哪种，是第 6 节的设计问题之一。
+project 的 display 层选哪种，是第 7 节的设计问题之一。
 
 ### 3.5 [判] 第 3 节的判据
 
@@ -882,36 +821,37 @@ xres=1024 yres=600 bpp=32 line_length=4096 实际用的行宽=4096 显存=245760
 ### 4.1 第一性原理：一个像素就是几个位段拼起来
 
 一个像素占 `bpp` 位。里面哪几位是红、哪几位是绿、哪几位是蓝，
-**由驱动决定，驱动通过 `var.red` / `var.green` / `var.blue` 告诉你**，
-每个都是 `offset`（从第几位开始）和 `length`（占几位）。
+**由驱动决定，驱动通过 `var.red` / `var.green` / `var.blue` 告诉你**。
 
-本板 `fb0` 没插显示器时（第 2.3 节实测 `red=16/8 green=8/8 blue=0/8 transp=0/0`；
-插上显示器后变成 565，见第 5.6 节）：
+> **位段（bitfield）**：一个整数里连续的若干位。`fb_bitfield` 用两个数描述一个位段：
+> `offset` 是从第几位开始（最低位是第 0 位），`length` 是占几位。
 
-```text
-    位号     31      24 23      16 15       8 7        0
-            +---------+----------+----------+----------+
-    整数值   |  不用   |    R     |    G     |    B     |     0x00RRGGBB
-            +---------+----------+----------+----------+
+本板 `fb0` 没插显示器时（第 2.3 节实测 `red=16/8 green=8/8 blue=0/8 transp=0/0`）：
 
-    内存里的顺序（小端，低字节在前）:
-    fb_base + 偏移:   [ B ] [ G ] [ R ] [ x ]
-                       +0    +1    +2    +3
-```
+XRGB8888 的字段与内存字节顺序：
+
+| 位号 | 字段 | 小端内存偏移 |
+|---|---|---|
+| 7～0 | B | `+0` |
+| 15～8 | G | `+1` |
+| 23～16 | R | `+2` |
+| 31～24 | 未使用的 X | `+3` |
+
+整数写法是 `0x00RRGGBB`，但小端内存中从低地址依次看到 `[B] [G] [R] [X]`。
 
 所以 `show_pixel.c` 里 32bpp 那一支直接 `*pen_32 = color` 是对的：
 它传进来的颜色格式约定为 `0x00RRGGBB`，恰好和本板的位段布局一样。
 **这是一个巧合，不是一条规律。** 视频 7:35 那段自己也说了"我们没有去看 bitfield，用惯例"。
 如果驱动给的是 `red=0/8 blue=16/8`（BGR 顺序），同样的代码画出来红蓝就对调了。
+插上显示器以后本板真的会换布局，第 6 节会看到。
 
 16bpp 常见的 RGB565 布局：
 
-```text
-    位号     15    11 10     5 4     0
-            +-------+--------+-------+
-            |  R 5  |  G 6   |  B 5  |       red=11/5 green=5/6 blue=0/5
-            +-------+--------+-------+
-```
+| RGB565 位号 | 字段 | framebuffer 位段描述 |
+|---|---|---|
+| 15～11 | R，5 位 | `red=11/5` |
+| 10～5 | G，6 位 | `green=5/6` |
+| 4～0 | B，5 位 | `blue=0/5` |
 
 绿色多一位，因为人眼对绿色最敏感。
 
@@ -979,7 +919,7 @@ g = (g >> (8 - var.green.length)) << var.green.offset;
 b = (b >> (8 - var.blue.length))  << var.blue.offset;
 ```
 
-第 5.6 节板上用的测试图 `probe/bars.c` 就是这么拼色的，可以做完再对着看。
+第 6 节板上用的测试图 `probe/bars.c` 就是这么拼色的，可以做完再对着看。
 
 **判据，以及一个会假绿的注错。** 用 16bpp 假显存，画一条横线，
 数非白像素的值（`grep -v ffff` 排掉白色，`sort | uniq -c` 按值分组计数）：
@@ -1032,27 +972,7 @@ done
 资料仓的 `show_pixel.c` 只画了红色。**如果你的判据也只用红色，这个 bug 永远发现不了。**
 规矩：颜色判据至少用三原色各测一次。
 
-### 4.4 高 8 位：GUI 写的是 ff，show_pixel 写的是 00
-
-`fb0` 的 `transp=0/0`，高 8 位驱动不看。第 5.4 节会把出厂 GUI 的一帧拉回电脑，
-统计出现最多的 5 种像素值：
-
-```text
-  17792  ff00070f
-  17551  ff000810
-  17432  ffffffff
-  14722  ff00070e
-  14480  ff02b9db
-```
-
-整帧 614400 个像素，**高字节不是 `ff` 的一个都没有**（实测计数 0）。
-而 `show_pixel.c` 写的红色是 `0x00FF0000`，高字节是 `00`。两者在屏上都正常显示，
-因为这 8 位控制器不读。
-
-这一条的实用意义在判据上：**回读比较时，高 8 位要么屏蔽掉，要么和写入方约定好。**
-你用 `grep -c 00ff0000` 数 GUI 画出来的红色，一个也数不到，因为 GUI 写的是 `ffff0000`。
-
-### 4.5 memset 为什么能清成白色
+### 4.4 memset 为什么能清成白色
 
 源码第 96 行用 `memset(fb_base, 0xff, screen_size)` 清屏，
 这能用，是因为**所有位都是 1** 在任何 RGB 布局下都是白（外加高位也是 1）。
@@ -1062,7 +982,7 @@ done
 红色 `00 00 ff 00` 是 4 个不同的字节。第 5.5 节会看到，清成非黑白的颜色，
 最快的办法是先填好一行，再按行复制。
 
-### 4.6 [判] 第 4 节的判据
+### 4.5 [判] 第 4 节的判据
 
 ```text
     [ ] rgb565: 16777216 种压成 65536 种
@@ -1083,20 +1003,20 @@ done
     PDF     181 页（5.4），就一句"可能需要把 GUI 程序禁止掉"
     视频    4_5-1 的 13:06-14:15
     源码    show_pixel.c 第 95-100 行
+    基础    [基础 08] 进程与信号 第二节（PID、pidof）、第四节（kill 只递通知）、第六节（启停脚本）
 
 这一节把前面的东西搬到板子上，实验全部走串口，一次传一个包。
 
-**5.1-5.5 的数据都是没插显示器时测的**（1024×600、32bpp、行宽 4096）。
-插上显示器后模式会变，判据命令里的 `bs`、`count`、`-tx4` 都要跟着改，见第 5.6 节。
+**本节的数据全部是没插显示器时测的**（1024×600、32bpp、行宽 4096）。
+插上显示器后模式会变，判据命令里的 `bs`、`count`、`-tx4` 都要跟着改，见第 6 节。
 
-```text
- WSL                          Windows PowerShell                      开发板
- -----------------------      --------------------------------------  ---------------------------
- 编 ARM 静态版                 serial-board.ps1 -Upload   == 串口 ==>  /tmp/ch03/
- 打成 tar                      serial-board.ps1 '命令'    == 串口 ==>  跑程序，dd 回读 /dev/fb0
-                        <==   serial-board.ps1 -Download <== 串口 ==  截屏的 .raw
- raw 转 png，看图
-```
+| 顺序 | 所在位置 | 动作 |
+|---|---|---|
+| 1 | WSL | 编译 ARM 静态程序并打成 tar |
+| 2 | Windows PowerShell → 开发板 | `serial-board.ps1 -Upload` 经串口上传到 `/tmp/ch03/` |
+| 3 | 开发板 | 脚本经串口发命令，运行程序并用 `dd` 回读 `/dev/fb0`，得到截图 `.raw` |
+| 4 | 开发板 → Windows | `serial-board.ps1 -Download` 经串口下载 `.raw` |
+| 5 | WSL | 把 raw 转成 PNG 后查看 |
 
 **先自己想：**
 
@@ -1127,7 +1047,8 @@ tar -cf board.tar -C board .
 .\tools\serial-board.ps1 'cd /tmp/ch03 && tar -xf board.tar && ls -l'
 ```
 
-本次上传两个程序打的包（`fbinfo` + `show_pixel`）实测：
+上传实测记录（这一次是早先只含 `fbinfo` 和 `show_pixel` 两个程序的包，文件名叫 `fbboard.tar`；
+上面的命令多带了一个 `oob`，包会大一些，传输过程一样）：
 
 ```text
 警告: block 6/17 arrived damaged (attempt 1), sending it again
@@ -1137,7 +1058,7 @@ fbboard.tar -> /tmp/ch03/fbboard.tar: 983040 bytes, gzip 483330, 17 blocks, 1 re
 第 6 块传坏了一次，脚本自动重传，最后哈希对上。这就是 01 章 2.11.4 讲的串口丢字节，
 每个 500 KB 左右的静态程序大约要传 35 秒。
 
-**找进程。**
+**找进程。** 进程、PID、`ps` 的几列是什么意思，见 [基础 08] 第一、二节。
 
 ```powershell
 .\tools\serial-board.ps1 'ps | grep -v grep | grep -E "mxapp|PID"; ls /etc/init.d/'
@@ -1154,8 +1075,8 @@ S02sysctl   S30dbus	S49ntp		    S50telnet	   S99myirhmi2
 S09modload  S40network	S50mosquitto	    S80dnsmasq	   bluetooth
 ```
 
-`mxapp2` 是出厂的 Qt 界面程序。`/etc/init.d/S99myirhmi2` 是启动它的脚本，
-`S` 开头的脚本开机时按数字顺序执行，99 是最后一批。脚本里关键的几行：
+`mxapp2` 是出厂的 Qt 界面程序。`/etc/init.d/S99myirhmi2` 是启动它的脚本
+（这类 `S` 加数字开头的启停脚本见 [基础 08] 第六节）。脚本里关键的几行：
 
 ```sh
 export QT_QPA_PLATFORM=linuxfb
@@ -1173,7 +1094,7 @@ stop() {
 .\tools\serial-board.ps1 'P=$(pidof mxapp2); ls -l /proc/$P/fd | grep fb; grep /dev/fb0 /proc/$P/maps'
 ```
 
-- `pidof mxapp2`：按程序名查进程号。
+- `pidof mxapp2`：按程序名查进程号（[基础 08] 第 2.5 节讲了按名字找的坑）。
 - `grep /dev/fb0` 而不是 `grep fb0`：`mxapp2` 还映射了一堆 Qt 缓存文件，
   文件名是一长串十六进制，实测其中一个含有 `6fb04e`，只写 `fb0` 会把它也匹配进来。
 - `/proc/<pid>/fd`：02 章讲过，它打开的每个 fd 指向什么。
@@ -1191,14 +1112,8 @@ lrwx------ 1 root root 64 Jan  1 00:04 4 -> /dev/fb0
 - `71153000-73153000`：虚拟地址区间，长度 `0x2000000` = 32 MiB。**GUI 把整个显存都映射了**，
   不只是一屏。
 - `rw-s`：可读可写，`s` 是 shared —— 就是 `MAP_SHARED`。
-- `8c100000`：这一列本来是"映射的文件偏移"，这里却正好是显存的物理地址
-  `smem_start`（第 2.3 节）。原因在驱动的 `mmap` 实现里，NXP 4.9.88 `mxsfb.c`：
-
-  ```c
-  vma->vm_pgoff = (info->fix.smem_start + offset) >> PAGE_SHIFT;
-  ```
-
-  驱动把"偏移"改写成了物理页号，`maps` 把它原样打了出来。
+- `8c100000`：这一列本来是"映射的文件偏移"，这里却正好是显存的物理地址 `smem_start`（第 2.3 节）。
+  为什么会这样，原因在驱动的 `mmap` 实现里，见延伸 C。
   **三条独立的路拿到了同一个数**：`fbinfo` 的 `smem_start`、`fbset` 的 `Address`、
   GUI 进程 `maps` 的偏移列，都是 `0x8c100000`。
 
@@ -1213,7 +1128,7 @@ lrwx------ 1 root root 64 Jan  1 00:04 4 -> /dev/fb0
 ```
 
 - `dd if=/dev/fb0 bs=4096 count=600`：每块 4096 字节（一行）、读 600 块（600 行），
-  **恰好一屏**。为什么必须带 `count`，见第 8 节坑 6。
+  **恰好一屏**。为什么必须带 `count`，见第 9 节坑 6。
 - `od -An -v -tx4`：板上 busybox 的 `od` 没有 `-w`，默认一行 4 个数，
   所以用 `tr -s " " "\n"` 把空格换成换行，变成一行一个像素，再 `grep -c`。
 - `R() { ...; }`：定义一个 shell 函数，`$1` 是它的第一个参数，省得把长管道写两遍。
@@ -1274,8 +1189,10 @@ gui: []
 gui after 3s: []
 ```
 
-已经没了。**`killall` 只是发了个信号，进程什么时候真正退出不确定。**
-所以停完一定要查 `pidof` 是空的，再做后面的实验。
+已经没了。**`killall` 只是递了一个 `SIGTERM`，递到就返回；GUI 要自己收拾完才退出。**
+[基础 08] 第四节在 WSL 里把这件事量出来了：装了处理函数的程序，收到 `SIGTERM` 后又活了 2 秒。
+所以停完一定要查 `pidof` 是空的，再做后面的实验；更稳的做法是照 [基础 08] 第六节，
+写一个"发信号、轮询等它消失、超时再 `kill -9`"的 stop。
 
 确认是空的之后，再跑一遍：
 
@@ -1346,6 +1263,33 @@ gui.png: 1024x600, 628519 字节
 注意两张图的传输时间：同样 2457600 字节，白底那张 gzip 后 2440 字节、0.6 秒；
 GUI 那张 gzip 后 659624 字节、79 秒。**串口截屏的耗时取决于画面能压缩成多小**。
 
+**GUI 画的像素，高字节是 `ff`。** 截回来的 `gui.raw` 在电脑上统计出现最多的 5 种像素值，
+再数一数高字节不是 `ff` 的像素有几个：
+
+```bash
+od -An -v -tx4 -w4 gui.raw | sort | uniq -c | sort -rn | head -5
+od -An -v -tx1 -w4 gui.raw | awk '$4 != "ff"' | wc -l
+```
+
+- 第一条：每个像素一行，排序后 `uniq -c` 数每种值出现几次，再按次数从多到少排，取前 5。
+- 第二条：一个字节一组、每行 4 个，第 4 个就是小端下的最高字节，数不是 `ff` 的行。
+
+```text
+  17792  ff00070f
+  17551  ff000810
+  17432  ffffffff
+  14722  ff00070e
+  14480  ff02b9db
+0
+```
+
+整帧 614400 个像素，**高字节不是 `ff` 的一个都没有**。
+而 `show_pixel.c` 写的红色是 `0x00FF0000`，高字节是 `00`。两者在屏上都正常显示，
+因为 `fb0` 的 `transp=0/0`，这 8 位控制器不读。
+
+这一条的实用意义在判据上：**回读比较时，高 8 位要么屏蔽掉，要么和写入方约定好。**
+你用 `grep -c 00ff0000` 数 GUI 画出来的红色，一个也数不到，因为 GUI 写的是 `ffff0000`。
+
 ### 5.5 读显存比写显存慢 10 倍
 
 第 3、4 节的描点都是往显存里写。project 的 display 层要做"区域刷新"、
@@ -1369,30 +1313,8 @@ GUI 那张 gzip 后 659624 字节、79 秒。**串口截屏的耗时取决于画
 
 **读比写慢 10 倍。** 写显存和普通内存拷贝差不多快，读显存掉到 47 MiB/s。
 
-为什么，能查到的出处是这两处：
-
-驱动 `mmap` 时给这段映射设的属性（NXP 4.9.88 `mxsfb.c`）：
-
-```c
-/* make buffers bufferable */
-vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-```
-
-`pgprot_writecombine` 在 ARM 上的定义（v4.9 `arch/arm/include/asm/pgtable.h`），
-以及 ARMv7 内存类型表里 `BUFFERABLE` 这一行（v4.9 `arch/arm/mm/proc-v7-2level.S`）：
-
-```text
-#define pgprot_writecombine(prot) \
-	__pgprot_modify(prot, L_PTE_MT_MASK, L_PTE_MT_BUFFERABLE)
-
- *			n	TR	IR	OR
- *   BUFFERABLE		001	10	00	00
- *   CACHED		011	10	10	10
-```
-
-显存映射用的内存类型叫 **writecombine**（写合并），名字就说明它是冲着"写"优化的；
-表里它的缓存属性列（IR、OR）是 `00`，和普通内存 `CACHED` 那一行的 `10` 不一样。
-读慢 10 倍是实测结论；CPU 在这种内存类型上具体怎么处理读访问，
+为什么：驱动给显存映射设了一种专门为"写"优化的内存类型（叫 writecombine）。
+内核源码摘录见延伸 B。读慢 10 倍是实测结论；CPU 在这种内存类型上具体怎么处理读，
 本笔记没有做进一步的实验，不下结论。
 
 **这个结论直接影响设计。** `labs/03_framebuffer/probe/fillbench.c` 把整屏涂成一种颜色，三种写法：
@@ -1403,6 +1325,9 @@ vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
 
 **本次上板实测**，`-O2` 和 `-O2 -fno-inline` 各一组（程序用 `%-24s` 对齐，
 中文按字节算宽度，所以列没对齐，原样保留）。
+
+> **内联（inline）**：编译器把一个短函数的函数体直接抄到调用它的地方，省掉函数调用本身的开销。
+> `-O2` 会自动做，`-fno-inline` 把它关掉。
 
 `-O2`，`put_pixel` 被内联：
 
@@ -1432,7 +1357,7 @@ C 离屏画完一次拷贝     22.4 ms
   将近 7 倍。project 里描点要经过 display 层的函数（甚至函数指针），更接近下面那组。
 - **C 比 A 多出来的约 5 ms**，是最后那次 2.4 MiB 的 `memcpy`，和 `rwbench` 的"写 4.9 ms"对得上。
 
-**三条设计结论，第 6 节要用：**
+**三条设计结论，第 7 节要用：**
 
 1. **显存当只写的用。** 需要读回的内容（背景、已画的界面），自己在普通内存里留一份。
 2. 画很多像素时，**函数调用的开销比写内存本身大得多**。区域填充、画一行文字这类操作，
@@ -1464,12 +1389,38 @@ real	0m0.018s
 
 这组数字包括进程启动时间，只能看出同样是"读比写慢"，不能和 `rwbench` 的毫秒数直接比。
 
-### 5.6 HDMI：插上显示器之后
+### 5.6 [判] 真机清单
 
-**到这里为止，本章所有板上数据都是在没插 HDMI 的状态下测的。**
+```text
+    [ ] fbinfo /dev/fb0 与 fbset -i：smem_start / line_length / 帧率 三笔对上
+    [ ] mxapp2 的 /proc/<pid>/maps 里 /dev/fb0 那一行偏移列 == smem_start
+    [ ] GUI 在跑时：show_pixel 之后白像素 < 614300；cmp 变化框在时钟位置
+    [ ] GUI 停掉后：pidof mxapp2 为空；红 100、白 614300，隔 3 秒两次 md5 相同
+    [ ] line.raw 下载 sha256 OK，转出的 PNG 是白底中间一条红线
+    [ ] gui.raw 里高字节不是 ff 的像素个数为 0
+    [ ] oob 在板上：(1024,100) 落到 (0,101)；(0,600) 退出码 139
+    [ ] rwbench：读显存明显慢于写显存（本板约 10 倍）
+```
 
-板上的 HDMI 口不是 i.MX6ULL 原生的，SoC 只有 LCDIF 这一个显示控制器，
-输出的是 RGB 并行信号。板上有一颗 **SiI9022** 把它转成 HDMI，挂在 I2C 总线上：
+"GUI 在跑时白像素少于 614300"这一条，本身就是"停掉 GUI"那条判据的注错见红：
+不停 GUI，判据必然红（实测 613889）。
+
+---
+
+## 6 第五段：插上 HDMI 显示器以后
+
+### 6.0 看哪里
+
+    视频    4_5-1 的 7:54-8:34（"一个 LCD 定了就定了"，在 HDMI 上不成立）
+    基础    [基础 10] 显示原理 第三节（标准模式的时序表）、第四节（SiI9022 和 I2C）、第五节（EDID）
+            [基础 09] 驱动与设备文件 第七节（dmesg 不记的事查不到）
+
+**到第 5 节为止，本章所有板上数据都是在没插 HDMI 的状态下测的。** 这一节把显示器插上。
+
+### 6.1 板上的 HDMI 是怎么接出来的
+
+i.MX6ULL 只有 LCDIF 这一个显示控制器，输出的是并行 RGB 信号，本身不会 HDMI。
+板上有一颗 **SiI9022** 把它转成 HDMI，这颗芯片挂在 I2C 总线上，驱动通过 I2C 配置它（[基础 10] 第四节）。
 
 ```powershell
 .\tools\serial-board.ps1 'dmesg | grep -iE "sii|lcdif|mxsfb"; D=/sys/bus/i2c/devices/1-0039; ls $D; cat $D/name $D/cable_state $D/fb_name'
@@ -1494,21 +1445,21 @@ mxs-lcdif
 - `1-0039`：I2C 第 1 号总线、地址 `0x39` 上的设备，驱动是 `sii902x`。
 - `cable_state=plugout`：HDMI 线没插。
 - `fb_name=mxs-lcdif`：它接的是 `fb0` 那个控制器。
-- dmesg 那行 `100ask, drivers/video/fbdev/mxsfb.c` 说明这块板的显示驱动被 100ask 改过。
+- `mxsfb 21c8000.lcdif: initialized`：开机 1.19 秒时 `mxsfb` 驱动把 LCDIF 初始化好了
+  （dmesg 每行的格式见 [基础 09] 第七节）。
+  那行 `100ask, drivers/video/fbdev/mxsfb.c` 说明这块板的显示驱动被 100ask 改过。
+- 第一行 `OF: ...lcdif@021c8000` 的 `OF` 指设备树，第 2 阶段讲。
 
 **插上显示器会发生什么，先看驱动源码怎么写**（NXP 4.9.88
 `drivers/video/fbdev/mxc/mxsfb_sii902x.c`，100ask 在它基础上改过，以板上实测为准）：
-检测到插线后读显示器的 **EDID**（显示器自报的"我支持哪些分辨率"），
+检测到插线后读显示器的 **EDID**（显示器自己存的一张"我支持哪些模式"的表，[基础 10] 第五节），
 从中找一个和当前模式最接近的，然后调用 `fb_set_var` **把 framebuffer 的分辨率改掉**。
 
-> **EDID**：显示器里一小块只读数据，经 HDMI 线里的 DDC（本质是 I2C）读出来，
-> 列出它支持的分辨率和时序。
-
 这意味着：**插不插显示器，`xres`/`yres` 可能不一样。**
-第 2.3 节量到的 1024×600 是"没插"时的值。这就是为什么所有程序都必须运行时 `ioctl` 问分辨率，
-不能把 1024×600 写死 —— 视频 8:24 说"一个 LCD 定了就定了"，在 HDMI 上不成立。
+第 2.3 节量到的 1024x600 是"没插"时的值。这就是为什么所有程序都必须运行时 `ioctl` 问分辨率，
+不能把 1024x600 写死 —— 视频 8:24 说"一个 LCD 定了就定了"，在 HDMI 上不成立。
 
-#### 插上之后：实测
+### 6.2 插上之后：实测
 
 显示器插到板子的 HDMI 口上，出厂 GUI 保持停止状态，然后查一遍：
 
@@ -1588,21 +1539,24 @@ Frame buffer device information:
   **驱动插线后改了模式，却不留日志**，只能靠 sysfs 或 `ioctl` 去查。
 - **`modes` 从 1 行变成 18 行**：没插线时只有 `U:1024x600p-58` 一行，
   现在列出的是显示器经 EDID 报上来的模式，每行一个，`p` 后面的数字是刷新率。
-  这台显示器最高报到 `1920x1080p-179`。
+  **这 18 行是怎么从显示器的 EDID 里来的**、开头的字母是什么意思、为什么 180Hz 写成 179、
+  为什么比显示器实际报的少 4 个，[基础 10] 第五节用电脑上导出的同一台显示器的 EDID 逐行对上了。
 - **分辨率变成 1280×720，bpp 从 32 变成 16**：`virtual_size`、`fbinfo`、`fbset` 三处一致。
   颜色位段变成 `red=11/5 green=5/6 blue=0/5`，就是第 4.1 节画的 RGB565。
   行宽跟着变成 2560 = 1280 × 2。
 - **时序全换了**：像素时钟从 50 MHz 变成 74.250 MHz，一行 1650 拍、一帧 750 行，
   帧率正好 60.000 Hz。对账 3 和 `fbset` 的 `D: 74.250 MHz, H: 45.000 kHz, V: 60.000 Hz`
-  逐个相等，**第 2.5 节那组判据在新模式下照样成立**。
+  逐个相等，**第 2.4 节那组判据在新模式下照样成立**。
+  这组时序是公开标准里的 720p60，[基础 10] 第三节把它和内核源码里的标准表逐个数对过。
 - **`smem_start` 和 `smem_len` 没变**：还是 `0x8c100000` 开始的 32 MiB。
   **同一块内存，只是解读方式变了**：一屏现在是 1843200 字节，占显存的 1/18.2。
 
 显示器报了 1920×1080，驱动为什么选的是 1280×720、为什么把 bpp 降到 16，
 这取决于 100ask 改过的驱动怎么写，本笔记没有拿到那份源码，不做推测，只记实测结果。
 
-**同一个 `show_pixel`，不重编，照样画。** 判据命令要按新模式改：
-一行 2560 字节、720 行，按 2 字节一组数像素，红色在 565 里是 `f800`、白色是 `ffff`：
+### 6.3 同一个 show_pixel，不重编，照样画
+
+判据命令要按新模式改：一行 2560 字节、720 行，按 2 字节一组数像素，红色在 565 里是 `f800`、白色是 `ffff`：
 
 ```powershell
 .\tools\serial-board.ps1 'cd /tmp/ch03; ./show_pixel; echo "show_pixel exit=$?"; R() { dd if=/dev/fb0 bs=2560 count=720 2>/dev/null | od -An -v -tx2 | tr -s " " "\n" | grep -c "$1"; }; echo "f800: $(R f800)  ffff: $(R ffff)"'
@@ -1619,8 +1573,10 @@ f800: 100  ffff: 921500
 这次走进了 `case 16` 那一支，`line_width = 1280 * 16 / 8 = 2560` 恰好等于新的 `line_length`。
 **如果当初把 1024、600、32 写死在代码里，插上显示器这一刻程序就画错了。**
 
-**彩条：用计数判颜色和位置。** `probe/bars` 运行时读分辨率，
-画 8 条等宽竖彩条（红 绿 蓝 白 黄 青 品红 黑），四周一圈 1 像素白边框，按 `var` 的位段拼色。
+### 6.4 彩条：用计数判颜色和位置
+
+`probe/bars` 运行时读分辨率，
+画 8 条等宽竖彩条（红 绿 蓝 白 黄 青 品红 黑），四周一圈 1 像素白边框，按 `var` 的位段拼色（第 4.3 节）。
 画完回读，按像素值分组计数：
 
 ```powershell
@@ -1692,29 +1648,21 @@ bars.png: 1280x720, 10802 字节
 前两条 2026-09-14 在显示器上看过，都成立：1280×720 这个模式下显示器没有裁边，
 颜色顺序和显存里的内容一致。第三条没测。
 
-### 5.7 [判] 真机清单
+### 6.5 [判] 插显示器之后的清单
 
 ```text
-    [ ] fbinfo /dev/fb0 与 fbset -i：smem_start / line_length / 帧率 三笔对上
-    [ ] mxapp2 的 /proc/<pid>/maps 里 /dev/fb0 那一行偏移列 == smem_start
-    [ ] GUI 在跑时：show_pixel 之后白像素 < 614300；cmp 变化框在时钟位置
-    [ ] GUI 停掉后：红 100、白 614300，隔 3 秒两次 md5 相同
-    [ ] line.raw 下载 sha256 OK，转出的 PNG 是白底中间一条红线
-    [ ] oob 在板上：(1024,100) 落到 (0,101)；(0,600) 退出码 139
-    [ ] rwbench：读显存明显慢于写显存（本板约 10 倍）
     [ ] 插上显示器后 cable_state=plugin，fbinfo 算出的帧率仍等于 fbset 的 V: 频率
-    [ ] 插上后按 fbinfo 给的 line_length / yres / bpp 回读：
+    [ ] 插上后 xres/yres/bpp/line_length 变成 1280/720/16/2560，smem_start 和 smem_len 不变
+    [ ] 同一个 show_pixel 不重编：f800 100 个、ffff 921500 个
+    [ ] 按 fbinfo 给的 line_length / yres / bpp 回读：
         bars 八种颜色的计数与按分辨率推算的值逐项相等，合计等于 xres*yres
 ```
 
-"GUI 在跑时白像素少于 614300"这一条，本身就是"停掉 GUI"那条判据的注错见红：
-不停 GUI，判据必然红（实测 613889）。
-
 ---
 
-## 6 落进项目：display 层（你自己做）
+## 7 落进项目：display 层（你自己做）
 
-### 6.1 这一章要交出什么
+### 7.1 这一章要交出什么
 
 `project/display/disp_manager.c` 现在是空壳，`display_init` 里留着一行
 `TODO 第 03 章 Framebuffer`。工程文档里早就给这一步定了验收口径
@@ -1731,12 +1679,29 @@ bars.png: 1280x720, 10802 字节
 路线图 `notes/03_项目/Todo/项目路线图-对齐电子产品量产工具.md` 记着：
 注册链表（`RegisterDisplay` 那一套）就是在这一章引进，是一次接口大改。
 
-**这一节不给实现。** 下面是对照对象的形状、本章实测对它的影响、以及你动手前该想清楚的问题。
+**这一节不给实现。** 给的是：对照对象长什么样、它哪几处不能照抄（都在本机编译或跑过）、
+七步施工顺序、每一步动手前要回答的问题、写完后要满足的判据。
+判据里的数字都来自 2026-09-19 在 scratchpad 里写的一份参考实现的实跑结果，
+参考实现不入库；你的写法可以不同，但判据的数字必须一致。
 
-### 6.2 对照：量产工具第 01-04 步长什么样
+### 7.2 对照：量产工具第 01-04 步长什么样
 
 `$P` = `$Q\06_实战项目\01_电子产品量产工具\source\02_视频配套源码\`，
-display 相关的是 `01_display_struct` 到 `04_disp_unittest` 四步。第 04 步的接口：
+display 相关的是 `01_display_struct` 到 `04_disp_unittest` 四步，节奏是一层四拍：
+
+```text
+  01 struct     只有 disp_manager.h：定义"一个显示设备"长什么样
+  02 device     framebuffer.c：把 show_pixel.c 的 main 前半段搬进 FbDeviceInit
+  03 manager    disp_manager.c：注册链表 + 按名字选 + PutPixel
+  04 unittest   disp_test.c + 通用 Makefile：画一个字母 A 上板肉眼看
+```
+
+读的时候的过滤：`04_disp_unittest/unittest/disp_test.c` 有 4686 行，其中 4600 多行是
+8x16 点阵字库数组，只看最后 50 行的 `lcd_put_ascii` 和 `main`。
+`Makefile.build` 是通用递归 Makefile，本仓不用（原因见路线图 3.3），跳过。
+
+第 04 步的接口（第 32 步最终版只多了 `DrawRegion` 等三个画图函数，
+`DisplayInit` 改名 `DisplaySystemRegister`，形状没变）：
 
 ```c
 typedef struct DispBuff {
@@ -1771,68 +1736,362 @@ int FlushDisplayRegion(PRegion ptRegion, PDispBuff ptDispBuff);
 PDispBuff GetDisplayBuffer(void);
 ```
 
-它的 `framebuffer.c` 里 `FbDeviceInit` 就是 `show_pixel.c` 的 `main` 前半段搬过去，
-`FbGetBuffer` 直接返回 `fb_base`，`FbFlushRegion` 是空函数。`disp_test.c` 的 `main`
-依次调 `DisplayInit` → `SelectDefaultDisplay("fb")` → `InitDefaultDisplay` → 画一个字母 →
-`FlushDisplayRegion`。
+调用关系如下：
 
-**用本章的实测回头读它，有三处值得你自己决定要不要照搬：**
+| 顺序 | 文件/层 | 调用或状态 | 作用 |
+|---|---|---|---|
+| 1 | `disp_test.c main` | `DisplayInit()` | 触发每个后端把自己挂到链表 |
+| 2 | `disp_test.c main` | `SelectDefaultDisplay("fb")` | 沿链表按名字选择后端 |
+| 3 | `disp_test.c main` | `InitDefaultDisplay()` | 调用选中后端的 `DeviceInit + GetBuffer` |
+| 4 | `disp_test.c main` | `PutPixel()` | manager 自己计算地址并写内存 |
+| 5 | `disp_manager.c` | `g_DispDevs: fb → NULL`；`g_DispDefault = &fb` | 只通过 `DispOpr` 函数指针表调用后端 |
+| 6 | `framebuffer.c` | `FbDeviceInit` | `open /dev/fb0`、`ioctl`、`mmap`，跨入内核完成初始化 |
+| 7 | 内核 `fbmem.c` / `mxsfb` | 驱动访问显存 | 最终连接硬件显存 |
 
-1. `line_width = var.xres * var.bits_per_pixel / 8`：没用 `line_length`（第 3.3 节）。
-2. `FbDeviceInit` 里 `ioctl` 或 `mmap` 失败直接 `return -1`，**前面 `open` 得到的 fd 没有关**。
-   对照源码第 28-31 行和第 38-41 行。
-3. `GetBuffer` 返回的就是显存本身，所以 `FlushRegion` 是空的。
-   第 5.5 节的数据说明：只要上层有一次"读回背景"，这个设计就要付 10 倍的读代价。
+**形状要学的就一件事：manager 只认 `DispOpr` 这张函数指针表，不认识 framebuffer。**
+以后加一个后端，只是多一个 `.c` 往链表上挂一张表，manager 一行不改。
 
-### 6.3 先自己想：动手前要回答的七个问题
-
-每个问题后面括号里是本章给你证据的那一节。不要求和量产工具一样，但要能说出为什么。
-
-    1. 分辨率、bpp、行宽存在哪一层？上层（font、ui）通过什么拿到？
-       插拔 HDMI 分辨率和 bpp 都会变（本板实测 1024x600x32 变成
-       1280x720x16），你的存法在变了之后会怎样？                （2.3、5.6）
-    2. PutPixel 查不查边界？查的话越界返回什么？
-       不查的话，谁来保证不越界？                              （3.4）
-    3. 颜色参数用 0x00RRGGBB 传进来，还是让上层直接给像素值？
-       拼色用 switch(bpp) 还是按 var 的位段？                   （4.1、4.3）
-    4. GetBuffer 给上层的是显存，还是一块离屏缓冲？
-       如果是离屏缓冲，FlushRegion 拷贝的时候行宽用哪个？      （5.5、3.3）
-    5. display_exit 的释放顺序是什么？init 半路失败时，
-       已经申请到的资源谁来还？                                  （6.2 第 2 条）
-    6. project/check.sh 是在 WSL 里跑的，而 WSL 里 open /dev/fb0 必然失败。
-       display_init 失败时整个程序怎么办？现有 29 条判据会不会全红？
-       有没有办法在 WSL 里也验证 PutPixel 写对了位置？          （2.2、3.2）
-    7. "上层不出现 /dev/fb0" 这一条验收，怎么写成一条能注错见红的判据？
-
-第 6 个问题最值得花时间。提示一个方向：量产工具之所以要"注册一张操作表、按名字选后端"，
-不只是为了以后能换显示设备 —— 你手里已经有一个现成的第二后端了，就是第 3.2 节的假显存。
-
-### 6.4 [判] 验收判据（你写完之后要全部满足）
+**不能照抄的地方（每条都在本机核过）：**
 
 ```text
-    [ ] WSL: bash project/check.sh 原有判据不减少、全部 PASS
-    [ ] WSL: 有一条判据能验证 PutPixel 的写入位置（不只是个数），并且注错见红过
-    [ ] WSL: 三原色各有一条颜色判据（4.3 那个纯红假绿的坑）
-    [ ] WSL: grep 判据：display/ 以外的目录不出现 "/dev/fb"
-    [ ] 板上: 停掉 GUI 后跑单测，回读计数与预期一致
-    [ ] 板上: 程序退出后 /proc/<pid> 已消失，再跑一次结果相同（资源确实还了）
-    [ ] 板上 + 显示器: 依次显示几种纯色和一个指定矩形，肉眼确认
-    [ ] CodeReading / TechReports 按 notes/03_项目/README.md 的规则同步
+  1  第 01、03 步的头文件把成员写成了函数声明，不是函数指针：
+         int DeviceInit(void);        应为  int (*DeviceInit)(void);
+     本机 gcc -fsyntax-only 实测第 03 步编译不过：
+         error: field 'DeviceInit' declared as a function
+     第 04 步才改对。照着视频逐步抄，第 03 步会卡住。
+  2  line_width = var.xres * var.bits_per_pixel / 8，没用 fix.line_length（3.3 节）。
+     manager 里又按 iXres 算了一遍，同一个错写了两处。
+  3  FbDeviceInit 里 ioctl 或 mmap 失败直接 return -1，前面 open 得到的 fd 没关。
+  4  DeviceExit 写了，但全部 32 步里没有任何地方调用它：
+         32 个步骤目录里 grep "->DeviceExit" 一处都没有；display 的 DeviceExit 只出现在
+         framebuffer.c 的定义和结构体赋值两行
+     程序退出靠内核回收。本仓 main.c 有 layers_exit，必须真的调到它。
+  5  PutPixel 只认 8/16/32 三种 bpp，16bpp 写死成 565 的位置，不看 var 里的位段（4.3 节）。
+  6  GetBuffer 返回显存本身，FlushRegion 是空函数；5.5 节量过显存读比写慢约 10 倍，
+     以后上层只要读回一次背景就要付这个代价。第一版可以照做，但要知道代价在哪。
 ```
+
+第 2 条有个要紧的推论：**这个错在板子上永远看不出来。** 板上两种模式的行宽刚好都等于
+`xres * bpp / 8`（1024x4=4096、1280x2=2560，第 2.3、6.2 节实测），
+算错和算对得到同一个数。要让它现形，只能自己造一个行尾有填充的显存 —— 这就是 D2 的假显存后端。
+
+### 7.3 施工顺序：七步
+
+量产工具的顺序是 struct -> device(fb) -> manager -> unittest，第一个能跑的东西要上板才看得到。
+本仓调成"先在 WSL 里全部验完，最后才上板"：
+
+```text
+  D1  头文件            定公共类型和接口                       WSL 编译
+  D2  manager + 假显存   注册、选择、启停；check.sh 原判据全绿    WSL 运行
+  D3  画点/填矩形 + 单测  make test、disp_test、读回独立计数       WSL 运行
+  D4  fb 后端            open/ioctl/mmap，失败路径还资源          WSL 能验一半
+  D5  判据固化           新判据写进 check.sh，每条注错见红        WSL
+  D6  上板               停 GUI、跑单测、读回显存计数、肉眼看      板子 + 显示器
+  D7  文档同步           CodeReading / TechReports / 路线图
+```
+
+每一步写完都要让 `bash project/check.sh` 全绿再走下一步。
+
+```text
+  最终的文件（D4 之后）
+  project/display/
+      disp_manager.h     公共类型 + 接口，上层只 include 它
+      disp_manager.c     链表、选择、启停、画点、填矩形
+      framebuffer.c      "fb"  后端：/dev/fb0
+      memdisp.c          "mem" 后端：malloc 一块内存冒充显存（名字你自己定）
+  project/unittest/
+      disp_test.c        单测，不进 product_tool
+```
+
+### 7.4 [做 L4] D1 头文件：公共类型
+
+**先自己想**（写之前把答案写在纸上）：
+
+    1. disp_buf（对应 DispBuff）至少要几个字段？
+       对照 7.2 第 2 条和第 5 条：只有 xres/yres/bpp 够不够画对一个点？
+    2. 这个头文件能不能 #include <linux/fb.h>？
+       想一想 font 层 include 它之后会看见什么；再想一想 D2 的假显存后端需不需要 Linux。
+    3. 本仓已有 display_init/display_exit 两个接口，main.c 的层表在调它们。
+       量产工具的 DisplayInit/SelectDefaultDisplay/InitDefaultDisplay 三步，
+       放进头文件，还是藏进 display_init 里面？（路线图 3.1 记过这个风险）
+    4. 颜色参数用什么格式传？（4.1、4.3）
+
+**线索**：
+
+- 问题 1：画对一个点需要 "地址 = base + y*行宽 + x*每像素字节数" 和 "值 = 三个分量各自放到哪几位"。
+  把这两件事需要的量全部列出来，就是结构体的字段。
+- 问题 2：位段用你自己定义的小结构体（offset + length 两个 int）表示，不借 `struct fb_bitfield`。
+- 问题 3：藏进去。`main.c` 不改是这一章的约束，也是分层的意义。
+  "选哪个后端"从环境变量来（和 `LOG_FILE` 同一个套路），名字你自己定，下文叫它 `DISP_DEV`。
+- 问题 4：上层一律传 `0x00RRGGBB`，拼成什么像素值是 display 的事。
+  04 章 font 层已经按这个约定写了规格（04 章 3.4 节）。
+- 命名跟本仓：小写加下划线（`disp_register`），不用匈牙利前缀（`PDispOpr`）。
+
+**[判] D1**：
+
+```text
+  [ ] 头文件自给自足：只 include 它一个也能编译
+        echo '#include "display/disp_manager.h"' | gcc -fsyntax-only -I. -Iinclude -x c -
+      没有任何输出
+  [ ] 头文件里没有 linux/fb.h、没有 /dev/fb0 字样
+  [ ] display_init / display_exit 的签名没变，bash check.sh 仍是原来的结果
+```
+
+### 7.5 [做 L4] D2 manager + 假显存后端
+
+**先自己想**：
+
+    1. 注册链表：头插还是尾插？两个后端注册完，链表顺序是什么？
+       这个顺序会影响"按名字找"的结果吗？
+    2. 谁来调各个后端的 register 函数？量产工具是 DisplayInit 里写死调用 FramebufferInit，
+       本仓照做就行 —— 但想一想"新增后端不用改 manager"这句话在这里其实没做到，差在哪。
+    3. display_init 失败时 main.c 会调 display_exit 吗？（读 main.c 的 layers_init）
+       所以 display_init 半路失败，已经申请的资源该由谁还？
+    4. 假显存后端：分辨率、bpp、行宽从哪来？怎么让行宽故意比 xres*bpp/8 大？
+       行尾多出来的字节填什么，才能在 D3 里查出"有没有写出界"？
+    5. 假显存的内容怎么交给外部去数？（提示：显存在板上可以 dd 出来，假显存呢）
+
+**线索**：
+
+- 问题 4 参考实现用的是一个环境变量 `DISP_MEM=宽x高x位深x行宽`，
+  缺省 `64x32x32x320`（每行 256 字节像素 + 64 字节填充），填充字节初始化为 `0xAA` 当哨兵。
+  32bpp 用 xRGB8888 的位段（红 16/8、绿 8/8、蓝 0/8），16bpp 用 RGB565（11/5、5/6、0/5）。
+- 问题 5 参考实现是 close 时如果设了 `DISP_MEM_DUMP=路径`，就把整块内存原样写进文件。
+  **只写原始字节，不在程序里统计**：统计交给外部脚本，否则就是"对自己测永远 PASS"。
+- 选择缺省值：`DISP_DEV` 没设时选 `fb`。不要做"fb 打不开就自动退到 mem"——
+  板上 fb 出问题时程序会静默画进一块没人看的内存。
+
+**这一步一定会撞上的事**：WSL 里没有 `/dev/fb0`，缺省选 fb 就会 init 失败。参考实现实测：
+
+```text
+$ ./build/x86/product_tool
+[E] display/framebuffer.c:38 open /dev/fb0 failed
+[E] main.c:46 display_init failed: device io failed
+$ echo $?
+1
+```
+
+（D2 时你还没写 fb 后端，报的会是"找不到名为 fb 的后端"，道理一样。）
+这时直接跑原来的 check.sh：**12 PASS / 12 FAIL**（交叉编译那组 SKIP 时）。
+解决办法是在 check.sh 开头 `export DISP_DEV=mem`，之后原判据恢复全绿。
+
+**[判] D2**：
+
+```text
+  [ ] DISP_DEV=mem ./build/x86/product_tool      退出码 0，日志正好 13 行（和原来一样）
+  [ ] DISP_DEV=nosuch ./build/x86/product_tool   退出码 1，报 not found
+  [ ] check.sh 加了 export DISP_DEV=mem 之后，原判据全绿
+  [ ] ASan 查泄漏：
+        make CFLAGS_EXTRA=-fsanitize=address LDLIBS=-fsanitize=address
+        DISP_DEV=mem ./build/x86/product_tool     没有 LeakSanitizer 输出
+      注错：把 close 里的 free 删掉，实测输出
+        Direct leak of 10240 byte(s) in 1 object(s) allocated from:
+      10240 = 320 x 32，正好是缺省假显存的大小
+```
+
+### 7.6 [做 L4] D3 画点、填矩形、单测
+
+**先自己想**：
+
+    1. put_pixel 越界怎么办？返回错误码，还是静默不画？
+       fill_rect 超出屏幕的部分呢？（3.4 节：越界的点真的会写到别的地方去）
+    2. 拼色：把 0x00RRGGBB 的每个 8 位分量放进 length 位，要丢掉哪几位？
+       用 4.3 节的办法，不写 switch(bpp) 拼色（地址步长那里还是要按 bpp 选指针宽度）。
+    3. unittest/disp_test.c 有自己的 main，和 main.c 冲突。
+       Makefile 怎么把它单独链成一个程序？现有 SUBDIRS 白名单要不要动？（路线图 3.4）
+    4. 单测画什么图案，才能一次同时验证：位置、行宽、三原色、边界、越界拒绝？
+
+**线索**：
+
+- 问题 3：新增一个 `test` 目标，每个 `unittest/xxx.c` 链成 `build/<arch>/unittest/xxx`，
+  链接时带上"全部 .o 去掉 main.o"。`filter-out` 一个函数就够。
+  `unittest` 不加进 `SUBDIRS`，否则它的 `main` 会被链进 `product_tool`。
+  生成的 `.d` 也要进 `-include`，不然改头文件单测不重编。
+- 问题 4，参考实现的图案（所有坐标用小数值，板上 1024 宽也放得下）：
+
+```text
+  全屏黑
+  (1,1)  起 4x3 红      (6,1) 起 4x3 绿      (11,1) 起 4x3 蓝
+  (xres-1, yres-1) 一个白点                         最后一行最后一列：行宽算错必然偏
+  (xres-2, 5) 起 4x2 黄，只有 2x2 在屏内            右边界裁剪
+  (xres, 0) 写一个白点，打印返回值                  越界必须拒绝
+
+      x: 0 1 2 3 4 5 6 7 8 9 ...
+  y=0    . . . . . . . . . .
+  y=1    . R R R R . G G G G . B B B B
+  y=2    . R R R R . G G G G . B B B B
+  y=3    . R R R R . G G G G . B B B B
+```
+
+- 外部计数脚本（你自己写，python 或 od+awk 都行）：按宽/高/位深/行宽解开转储文件，
+  输出每种像素值的个数、几个指定坐标的值、行尾填充里还剩几个 0xAA。
+
+**[判] D3**，参考实现实测（`DISP_DEV=mem DISP_MEM=... DISP_MEM_DUMP=... build/x86/unittest/disp_test`）：
+
+```text
+  64x32x32x320（缺省，行尾有填充）
+      mode 64x32x32 line_length 320
+      out of range put_pixel ret -1
+      转储 10240 字节；填充 0xAA 2048 个（= 64 x 32，一个没少）
+      00000000:2007  000000ff:12  0000ff00:12  00ff0000:12  00ffff00:4  00ffffff:1
+      (1,1)=00ff0000 (4,3)=00ff0000 (5,1)=00000000 (6,1)=0000ff00 (11,1)=000000ff
+      (63,31)=00ffffff (63,5)=00ffff00 (62,6)=00ffff00 (61,5)=00000000
+
+  64x32x16x192（RGB565）
+      0000:2007  001f:12  07e0:12  f800:12  ffe0:4  ffff:1       填充 0xAA 2048 个
+```
+
+2007 + 12x3 + 4 + 1 = 2048 = 64x32，一个像素都不多不少。
+
+**注错见红**（参考实现逐条实测，你写完也要逐条做一遍）：
+
+```text
+  注错                               缺省 64x32x32x320 上的现象
+  put_pixel 行宽改成 xres*bpp/8      三原色各剩 8 个，(1,1)=00000000，0xAA 剩 448
+    同样的错，换成 64x32x32x256      计数和坐标与正确版完全一样  <- 行尾无填充时看不出
+  put_pixel 去掉 x>=xres 检查        越界返回 0，0xAA 剩 2044（写进了第 0 行的填充）
+  红、蓝位段对调                     (1,1)=000000ff，(11,1)=00ff0000，黄变 0000ffff
+  16bpp 拼色不丢低位(565 模式)       绿变 1fe0，蓝变 00ff；红 f800 仍然对  <- 只查红会假绿
+  直接写 rgb 不看位段(565 模式)      只剩 4 种值：红 12 个全变黑，绿和黄混成 ff00 共 16 个
+  fill_rect 去掉裁剪                 没红
+```
+
+最后一行要你解释：为什么 fill_rect 不裁剪也不出错？注错不红，要么判据没覆盖，
+要么被注错的代码本来就多余。这里是哪一种？如果以后为了速度让 fill_rect
+直接写内存、不经过 put_pixel，这条判据还能不能守住？
+
+最后，加了 unittest/disp_test.c 之后 check.sh [4] 会红（实测 got [10] want [11]）。它拿 `find . -name '*.c'` 数出的文件数
+和 `make` 编了几个文件比，而 `make` 不编 unittest，所以差 1。改判据，不改 Makefile。
+
+### 7.7 [做 L4] D4 fb 后端
+
+**先自己想**：
+
+    1. 显存映射多大？xres*yres*bpp/8、line_length*yres、还是 fix.smem_len？
+       各自映射出来能写到哪里？（5.4 节：smem 是 32 MiB，一屏只用了 2.4 MiB）
+    2. open 成功、ioctl 失败时，fd 谁关？mmap 失败时呢？
+       写一个 close 函数，让它能安全地被"半初始化"的状态调用，失败路径都调它。
+    3. 位段从 var.red/green/blue 里抄进 disp_buf。为什么不在这里写死 565？（6.2 节）
+    4. 设备路径要不要能换？（提示：换成 /dev/null 就能在 WSL 里走一遍 ioctl 失败路径）
+
+**线索**：参考实现让 `DISP_FB` 环境变量覆盖缺省的 `/dev/fb0`。
+`/dev/null` 能 open，但 FBIOGET_VSCREENINFO 会返回 ENOTTY，正好停在"fd 已开、ioctl 失败"那一步。
+
+**[判] D4**，WSL 实测，用 strace 看系统调用序列：
+
+```text
+  DISP_DEV=fb DISP_FB=/dev/null strace -e trace=openat,ioctl,close ./build/x86/product_tool
+  从打开 /dev/null 那一行起的序列：
+      openat = 3 ; ioctl = -1 ENOTTY ; close = 0 ; exit 1
+  注错：删掉 ioctl 失败分支里的 close 调用
+      openat = 3 ; ioctl = -1 ENOTTY ; exit 1            <- 少了 close
+```
+
+mmap 那条失败路径 WSL 里造不出来，靠读代码核对它和 ioctl 失败走的是同一个 close。
+成功路径（真的映射出显存）只能到 D6 上板验。
+
+### 7.8 [做 L4] D5 把判据固化进 check.sh
+
+D2 到 D4 的判据都要进 `project/check.sh`，每条正判据后面跟一条注错。至少有：
+
+```text
+  [ ] export DISP_DEV=mem，原判据全绿；[4] 已改成不数 unittest
+  [ ] make test 编出 build/x86/unittest/disp_test
+  [ ] 单测转储的计数：像素值分布、指定坐标、0xAA 哨兵
+      注错：行宽 / 越界检查 / 红蓝位段 / 565 缩位，各至少红一次
+      行宽那条必须在"有填充"的假显存上跑，否则注错不红
+  [ ] 16bpp 模式跑一遍同样的图案，三原色各一条（4.3 节纯红假绿的坑）
+  [ ] fb 后端 ioctl 失败路径的 open/close 序列；注错删 close
+  [ ] ASan 泄漏：正常 0 条，注错删 free 出 1 条
+  [ ] grep：display/ 以外的 .c/.h 里不出现 "/dev/fb"
+      注错：往 page/page_manager.c 里加一行含 /dev/fb0 的注释，必须变红
+  [ ] 交叉编译：ARM 版 product_tool 和 disp_test 都能编出来
+```
+
+最后一条要有交叉工具链才跑得到。查一下 `command -v arm-linux-gnueabihf-gcc`，
+没有就 `apt-get install -y gcc-arm-linux-gnueabihf` 装一个（2026-09-22 装的是 15.2.0），
+否则 check.sh 的 `[2]` 那组会 SKIP，末尾变成 `PASS=47 FAIL=0 SKIP=1`。
+装好之后全绿是 `PASS=52 FAIL=0 SKIP=0`。
+
+### 7.9 [做 L4] D6 上板
+
+**先自己想**：
+
+    1. 板上跑单测之前，为什么一定要先停出厂 GUI，并确认 pidof 为空？（5.1-5.3 节）
+    2. 板上没有 python，怎么独立数显存里的像素？
+       （5.4 节做过 dd 截屏；可以在板上 od | sort | uniq -c，也可以下载回 WSL 用 D3 的脚本）
+    3. 插着 HDMI 和不插，同一个 disp_test 不重编，预期计数各是多少？
+
+**期望值**。不用手算：把假显存的几何设成板上那两种，同一个单测在电脑上跑一遍，
+跑出来的就是上板的期望值。
+
+```text
+  DISP_MEM=1024x600x32x4096       不插显示器
+      00000000:614359 000000ff:12 0000ff00:12 00ff0000:12 00ffff00:4 00ffffff:1
+      合计 614400 = 1024 x 600
+  DISP_MEM=1280x720x16x2560       插 HDMI
+      0000:921559 001f:12 07e0:12 f800:12 ffe0:4 ffff:1
+      合计 921600 = 1280 x 720
+```
+
+**[判] D6**（2026-09-22 实测，不插显示器那一组）：
+
+```text
+  [x] 停 GUI 后 pidof mxapp2 为空
+  [x] disp_test 打印的 mode 行和 fbset 一致
+          disp_test: mode 1024x600x32 line_length 4096
+          fbset -s : mode "1024x600-59", geometry 1024 600 1024 600 32, V 58.586 Hz
+  [x] dd 读回显存，计数和坐标与期望值逐项相等
+          dd if=/dev/fb0 bs=4096 count=600   2457600 字节, 0.043 s, 57.4 MB/s
+          sh count.sh fb.raw 1024 600 32 4096   板上耗时 41.6 s
+          00000000:614359 000000ff:12 0000ff00:12 00ff0000:12 00ffff00:4 00ffffff:1
+          (1,1)=00ff0000 (6,1)=0000ff00 (11,1)=000000ff (1023,599)=00ffffff
+          (1023,5)=00ffff00 (1022,6)=00ffff00 (1021,5)=00000000
+  [x] 程序退出后没有残留进程，立刻再跑一次，两次 dd 的 sha256 相同
+          dd425406578ae8241b33bf0749767b6121ad0aa8ddd5034c0abe27e0a24d1ae8
+  [ ] 插显示器：肉眼看到左上角三个色块和右边缘的半个黄块（色块很小，贴近屏幕看）
+  [ ] 恢复 GUI
+```
+
+**坑：交叉编译出来的动态可执行文件在板上起不来。** 第一次传上去直接报
+
+```text
+  ./disp_test: /lib/libc.so.6: version `GLIBC_2.38' not found (required by ./disp_test)
+```
+
+板上是 buildroot 的 glibc 2.30（2024 年 7 月），开发机的交叉工具链带的是 2.41。
+改成静态链接就好：`make CROSS=arm-linux-gnueabihf- LDFLAGS=-static`
+（`LDFLAGS` 在 Makefile 里是 `:=` 空值，命令行传的变量优先级更高）。
+产物从 72 KB 变成 495 KB。**交叉编译成功和能在目标板上跑起来是两件事**，
+`check.sh` 的 `[2]` 组只验了前一件。
+
+### 7.10 D7 文档同步
+
+按 `notes/03_项目/README.md` 的对照表：
+
+```text
+  CodeReading/project/层管理器空壳-逐行精读.md    display 那部分拆出去，新写 display 层精读
+  TechReports/project/                            新一篇：display 层，六节固定结构
+  Todo/项目路线图                                  3.1 注册链表、3.4 unittest 两条勾掉
+  README 进度                                     check.sh 的新 PASS 数
+```
+
+TechReports 的"遇到的问题"写你自己真撞上的，不编；没撞上就写 D3 表里"换一种写法会怎样"的实测。
 
 ---
 
-## 7 自检问题
+## 8 自检问题
 
 答不上来就回对应小节。
 
 1. 应用程序画一个像素要发几次系统调用？屏幕为什么能跟上？（1、2.1）
-2. `/dev/fb0` 这个文件里存的是什么？改名叫 `abc` 还能用吗？（2.2）
-3. WSL 里 `mknod c 29 0` 造出来的节点为什么 `open` 失败？errno 是几？和 `ENOTTY` 差在哪一步？（2.2）
+2. `/dev/fb0` 这个文件里存的是什么？改名叫 `abc` 还能用吗？（2.2、[基础 09] 第三节）
+3. WSL 里 `mknod c 29 0` 造出来的节点为什么 `open` 失败？errno 是几？和 `ENOTTY` 差在哪一步？
+   为什么这个节点不能建在 `/mnt/e` 下？（2.2、0.5）
 4. `ioctl` 成功返回什么？PDF 5.2.2 那句为什么是错的？（0.3）
 5. 描点要用到的数，哪些在 `var` 里、哪些在 `fix` 里？"fix 很少用到"在什么条件下成立？（2.3）
-6. 由 `pixclock` 和六个消隐/同步参数怎么算出帧率？只用 `xres`/`yres` 算会得几？（2.3、2.5）
-7. `fb_fix_screeninfo` 在 x86-64 和 ARM 上为什么不一样大？请求码能不能帮你发现结构体用错了？（2.4）
+6. 由 `pixclock` 和六个空白同步参数怎么算出帧率？只用 `xres`/`yres` 算会得几？（2.3、2.4）
+7. `fb_fix_screeninfo` 在 x86-64 和 ARM 上为什么不一样大？请求码能不能帮你发现结构体用错了？（延伸 A、[基础 09] 第六节）
 8. 像素偏移公式是什么？PDF 那个公式的适用条件是什么？（3.1、3.3）
 9. 32bpp 的 `0x00FF0000` 在内存里的 4 个字节是什么顺序？为什么？（3.2、4.1）
 10. 行尾有 8 字节填充、却用 `xres*4` 当行宽，一条竖线会变成什么样？（3.3）
@@ -1841,25 +2100,26 @@ PDispBuff GetDisplayBuffer(void);
 13. 888 压成 565 剩几种颜色？纯白读回来为什么可能变灰？（4.2）
 14. 不写 `switch(bpp)`，按位段拼一个分量是哪两步？（4.3）
 15. 565 红绿位数写反，为什么用纯红测不出来？（4.3）
-16. GUI 画的像素高字节是多少？为什么 `grep -c 00ff0000` 数不到 GUI 画的红色？（4.4）
-17. 为什么 `memset` 能清白清黑，不能清红？（4.5）
-18. 怎么证明出厂 GUI 在用 `/dev/fb0`？`maps` 里那个 `8c100000` 是什么？（5.1）
+16. GUI 画的像素高字节是多少？为什么 `grep -c 00ff0000` 数不到 GUI 画的红色？（5.4）
+17. 为什么 `memset` 能清白清黑，不能清红？（4.4）
+18. 怎么证明出厂 GUI 在用 `/dev/fb0`？`maps` 里那个 `8c100000` 是什么？（5.1、延伸 C）
 19. GUI 在跑时你画的线会被擦掉吗？怎么用数字回答？（5.2）
-20. `killall` 之后立刻查进程，为什么可能还在？（5.3）
-21. 不插显示器怎么截屏？截屏的 `dd` 为什么必须带 `count`？（5.4、8）
+20. `killall` 之后立刻查进程，为什么可能还在？可靠的 stop 怎么写？（5.3、[基础 08] 第四、六节）
+21. 不插显示器怎么截屏？截屏的 `dd` 为什么必须带 `count`？（5.4、9 坑 6）
 22. 读显存和写显存哪个快？这对 display 层的接口设计意味着什么？（5.5）
-23. 插上 HDMI 显示器，分辨率为什么可能变？谁改的？（5.6）
+23. 插上 HDMI 显示器，分辨率为什么可能变？谁改的？模式清单是从哪来的？（6.1、6.2、[基础 10] 第五节）
 24. 本板插上显示器后 bpp 变成几？第 5.2 节那条 `grep -c 00ff0000` 的判据为什么会失效？
-    同一个 `show_pixel` 为什么不用重编就能照常画？（5.6、8）
+    同一个 `show_pixel` 为什么不用重编就能照常画？（6.2、6.3、9 坑 11）
 
 ---
 
-## 8 已知的坑
+## 9 已知的坑
 
-**坑 1：WSL 里没有 `/dev/fb0`，自己 `mknod` 也没用。**
+**坑 1：WSL 里没有 `/dev/fb0`，自己 `mknod` 也没用；而且节点建错地方连 `mknod` 都做不成。**
 
 实测 `open` 报 `ENODEV`（第 2.2 节）。内核里有 fb 核心，没有显示控制器的驱动实例。
 这一章的真显存实验只能上板；电脑上练地址和颜色，用第 3.2 节的假显存。
+造节点要在 `~` 下：`/mnt/e` 上 `mknod` 报 `Operation not supported`，`/tmp` 带 `nodev` 建了也打不开（[基础 09] 第四节）。
 
 **坑 2：出厂 GUI 不会整屏擦掉你的画，只擦它自己变化的那一块。**
 
@@ -1868,7 +2128,8 @@ PDispBuff GetDisplayBuffer(void);
 
 **坑 3：`killall` 之后进程不会立刻消失。**
 
-`S99myirhmi2 stop` 之后等 1 秒，实测 `pidof mxapp2` 还查得到。脚本里要轮询或多等几秒。
+`S99myirhmi2 stop` 之后等 1 秒，实测 `pidof mxapp2` 还查得到（第 5.3 节）。
+`killall` 只递信号不等结果（[基础 08] 第四节），脚本里要轮询或写等待型的 stop（[基础 08] 第六节）。
 
 **坑 4：只数个数的判据会放过"整体平移"。**
 
@@ -1892,21 +2153,14 @@ cat bytes: 33554432
 ```
 
 读到末尾是 `smem_len` 那么多（第 2.3 节的 32 MiB），是一屏的 13.65 倍。
-内核通用的 `fb_read`（v4.9 `drivers/video/fbdev/core/fbmem.c`）里总长度的取法：
-
-```c
-total_size = info->screen_size;
-
-if (total_size == 0)
-	total_size = info->fix.smem_len;
-```
+内核里读 `/dev/fb0` 时总长度怎么取的，见延伸 D。
 
 截屏必须写 `bs=<line_length> count=<yres>`，否则 2.4 MiB 的截屏变成 32 MiB，
 经串口要多传十几倍的数据，转图片时后面也全是垃圾。
 
 **坑 7：GUI 写的像素高字节是 `ff`，数颜色时要带上它。**
 
-第 4.4 节。`grep -c 00ff0000` 只数得到 `show_pixel` 这类写 `00` 的程序画的红。
+第 5.4 节。`grep -c 00ff0000` 只数得到 `show_pixel` 这类写 `00` 的程序画的红。
 
 **坑 8：`/dev/fb0` 的权限是 `crw-rw---- root video`。**
 
@@ -1925,9 +2179,9 @@ if (total_size == 0)
 已改成 `[IO.Path]::Combine`（遇到绝对路径直接用它），并用绝对路径实测下载一次、
 哈希与旧文件一致。之前的章节都用相对路径，所以一直没暴露。
 
-**坑 11：插上显示器，bpp 从 32 变成 16，第 5 节前半的判据命令全部失效。**
+**坑 11：插上显示器，bpp 从 32 变成 16，第 5 节的判据命令全部失效。**
 
-第 5.6 节实测：插线后模式变成 1280×720、16bpp、行宽 2560。这时：
+第 6.2 节实测：插线后模式变成 1280×720、16bpp、行宽 2560。这时：
 
 - `dd bs=4096 count=600` 读到的不再是一屏（一屏是 `bs=2560 count=720`）。
 - `od -tx4` 把两个 565 像素拼成一个 32 位数，`grep -c 00ff0000` 永远是 0。
@@ -1938,28 +2192,172 @@ if (total_size == 0)
 
 ---
 
-## 9 这一章交出了什么
+## 10 这一章交出了什么
 
     notes/01_应用编程/03_Framebuffer显示.md     本笔记
+    notes/00_基础/08_进程与信号.md              配套基础，实验在 labs/00_basics/07_process_signal/
+    notes/00_基础/09_驱动与设备文件.md          配套基础，实验在 labs/00_basics/08_driver_devfile/
+    notes/00_基础/10_显示原理.md                配套基础，实验在 labs/00_basics/09_display_scan/
     labs/03_framebuffer/probe/                  8 个测量探针
         fbopen.c     open + ioctl 的 errno（2.2）
-        fbabi.c      结构体大小与偏移，不运行只看 nm -S（2.4）
+        fbabi.c      结构体大小与偏移，不运行只看 nm -S（延伸 A）
         oob.c        越界描点落在哪（3.4）
         rgb565.c     888 压成 565 的丢失量（4.2）
         rwbench.c    显存读/写/普通内存拷贝计时（5.5）
         fillbench.c  三种整屏填充写法计时（5.5）
-        bars.c       插显示器用的彩条测试图，按位段拼色（5.6）
-        raw2png.py   显存转储转 PNG，支持 32bpp 和 16bpp（5.4、5.6）
+        bars.c       插显示器用的彩条测试图，按位段拼色（6.4）
+        raw2png.py   显存转储转 PNG，支持 32bpp 和 16bpp（5.4、6.4）
     tools/serial-board.ps1                      修复 -Download -To 绝对路径
 
 **要你自己完成的**：`fbinfo`（2.3）、假显存描点（3.2、3.3）、按位段拼色（4.3）、
-project 的 display 层（第 6 节）。
+project 的 display 层（第 7 节）。
 
-**还欠的**：拔掉显示器后模式会不会变回 1024×600×32（第 5.6 节）。
+**还欠的**：拔掉显示器后模式会不会变回 1024×600×32（第 6.4 节）。
 
 下一章 04 文字显示：在描点函数之上画字符。点阵字模本质上是一张"哪些像素要描"的位图，
 FreeType 是把矢量字体现场算成这张位图。那一章会大量调用描点，
 第 5.5 节"函数调用比写内存贵"那组数据在那里会直接变成性能问题。
+
+---
+
+## 延伸（选读，不影响主线）
+
+这几节回答主线里"为什么会这样"的问题，要读内核源码，第一次读可以跳过。
+
+### 延伸 A 同一个结构体，x86 和 ARM 上不一样大
+
+`fbinfo` 要分别编 x86 版和 ARM 版，还有一个理由：**这两个结构体在两个平台上的布局不一样。**
+
+**先自己想：** `fb_fix_screeninfo` 里 `smem_start` 的类型是 `unsigned long`。
+x86-64 和 32 位 ARM 上 `long` 各几个字节？这会让后面每个字段的偏移怎么变？
+
+板子上跑不了"打印 sizeof 的程序"之外的招，而我们想在 WSL 里一次看两个平台。
+[基础 03] 用过一个办法：**让编译器把大小变成数组长度，再用 `nm -S` 读符号大小**，
+不用运行程序。`labs/03_framebuffer/probe/fbabi.c`：
+
+```c
+char var_size[sizeof(struct fb_var_screeninfo)];
+char fix_size[sizeof(struct fb_fix_screeninfo)];
+char fix_smem_len_off[offsetof(struct fb_fix_screeninfo, smem_len)];
+char fix_line_length_off[offsetof(struct fb_fix_screeninfo, line_length)];
+char var_bpp_off[offsetof(struct fb_var_screeninfo, bits_per_pixel)];
+```
+
+- `offsetof(结构体, 字段)`：这个字段离结构体开头有多少字节。
+
+```bash
+gcc -c probe/fbabi.c -o fbabi_x86.o && nm -S --defined-only fbabi_x86.o
+arm-linux-gnueabihf-gcc -c probe/fbabi.c -o fbabi_arm.o && nm -S --defined-only fbabi_arm.o
+```
+
+- `-c`：只编译不链接，拿到 `.o` 就够了。
+- `nm -S`：在地址后面多打一列**符号大小**，这一列就是数组长度。
+- `--defined-only`：只列本文件定义的符号。
+
+**本机实测**（前 5 行是 x86-64，后 6 行是 ARM；第二列是十六进制大小；
+`nm` 默认按符号名排序）：
+
+```text
+0000000000000120 0000000000000030 B fix_line_length_off
+00000000000000a0 0000000000000050 B fix_size
+00000000000000f0 0000000000000018 B fix_smem_len_off
+0000000000000150 0000000000000018 B var_bpp_off
+0000000000000000 00000000000000a0 B var_size
+00000000 b $d
+000000f8 0000002c B fix_line_length_off
+000000a0 00000044 B fix_size
+000000e4 00000014 B fix_smem_len_off
+00000124 00000018 B var_bpp_off
+00000000 000000a0 B var_size
+```
+
+ARM 那边多出来的 `$d` 是 ARM ELF 的**映射符号**，标记"从这里开始是数据不是指令"，
+给反汇编器用的，没有大小，不用管。
+
+换成十进制：
+
+| | x86-64 | ARM |
+|---|---|---|
+| `sizeof(fb_var_screeninfo)` | 160 | 160 |
+| `sizeof(fb_fix_screeninfo)` | **80** | **68** |
+| `smem_len` 的偏移 | 24 | 20 |
+| `line_length` 的偏移 | 48 | 44 |
+| `var.bits_per_pixel` 的偏移 | 24 | 24 |
+
+`var` 全是 `__u32`，两边一样大；`fix` 里有两个 `unsigned long`（`smem_start` 和
+`mmio_start`），x86-64 上 8 字节、ARM 上 4 字节，于是从 `smem_len` 往后每个字段都挪了位置。
+`smem_len` 的偏移 24 = `id[16]` 的 16 + `smem_start` 的 8；ARM 上 20 = 16 + 4。
+
+这件事的工程含义：**请求码里不带结构体大小**。`fb.h` 里
+`#define FBIOGET_FSCREENINFO 0x4602`，就是一个裸数字（新式请求码是带大小的，
+两种请求码的对比见 [基础 09] 第六节）。
+所以结构体布局对不对，全靠你编译时用的头文件和目标平台一致。
+交叉编译用 `arm-linux-gnueabihf-gcc` 就会自动用它自己 sysroot 里的头文件
+（[基础 03]），不要手工 `-I` 到 x86 的 `/usr/include` 去。
+
+判据：
+
+```text
+    [ ] fbabi 的 nm -S 结果：fix 在 x86-64 上 80 字节、ARM 上 68 字节
+```
+
+### 延伸 B 读显存为什么慢：驱动给映射设的内存类型
+
+第 5.5 节实测读显存比写慢 10 倍。能查到的出处是这两处：
+
+驱动 `mmap` 时给这段映射设的属性（NXP 4.9.88 `mxsfb.c`）：
+
+```c
+/* make buffers bufferable */
+vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
+```
+
+`pgprot_writecombine` 在 ARM 上的定义（v4.9 `arch/arm/include/asm/pgtable.h`），
+以及 ARMv7 内存类型表里 `BUFFERABLE` 这一行（v4.9 `arch/arm/mm/proc-v7-2level.S`）：
+
+```text
+#define pgprot_writecombine(prot) \
+	__pgprot_modify(prot, L_PTE_MT_MASK, L_PTE_MT_BUFFERABLE)
+
+ *			n	TR	IR	OR
+ *   BUFFERABLE		001	10	00	00
+ *   CACHED		011	10	10	10
+```
+
+显存映射用的内存类型叫 **writecombine**（写合并），名字就说明它是冲着"写"优化的；
+表里它的缓存属性列（IR、OR）是 `00`，和普通内存 `CACHED` 那一行的 `10` 不一样。
+读慢 10 倍是实测结论；CPU 在这种内存类型上具体怎么处理读访问，
+本笔记没有做进一步的实验，不下结论。
+
+### 延伸 C maps 里那一列偏移为什么是物理地址
+
+第 5.1 节 GUI 进程 `maps` 里 `/dev/fb0` 那一行，偏移列是 `8c100000`，正好是显存的物理地址。
+普通文件映射时这一列是"从文件的第几个字节开始映射"。
+
+原因在驱动的 `mmap` 实现里，NXP 4.9.88 `mxsfb.c`：
+
+```c
+vma->vm_pgoff = (info->fix.smem_start + offset) >> PAGE_SHIFT;
+```
+
+- `vm_pgoff`：这段映射从"文件"的第几页开始，`maps` 那一列打印的就是它（换算成字节）。
+- `PAGE_SHIFT`：页大小的位数，本板一页 4096 字节，右移 12 位就是除以 4096。
+
+驱动把"偏移"改写成了物理页号，`maps` 把它原样打了出来。
+
+### 延伸 D cat /dev/fb0 为什么读出 32 MiB
+
+第 9 节坑 6：`cat /dev/fb0` 读到末尾是 33554432 字节。
+内核通用的 `fb_read`（v4.9 `drivers/video/fbdev/core/fbmem.c`）里总长度的取法：
+
+```c
+total_size = info->screen_size;
+
+if (total_size == 0)
+	total_size = info->fix.smem_len;
+```
+
+驱动没设 `screen_size` 时，能读到的总长度就是整块显存 `smem_len`，而不是一屏。
 
 ---
 
@@ -1972,6 +2370,7 @@ FreeType 是把矢量字体现场算成这张位图。那一章会大量调用�
 区别是 NEMU 里"按节拍去读"的是模拟器的一段 C 代码，这里是 SoC 里的 LCDIF 硬件。
 
 如果你在龙芯 SoC 上做过 DVI 输出：扫描器按像素时钟从一块 RAM 里逐个取像素、
-生成行场同步，那就是本章图 2.1 右边那个"显示控制器"。本章第 2.3 节 `fbset` 那行
+生成行场同步，那就是本章图 2.1 右边那个"显示控制器"。本章第 2.4 节 `fbset` 那行
 `timings 20000 140 160 20 12 20 3`，就是你当时在 RTL 里写死的那几个行场参数，
 只不过这里由驱动写进 LCDIF 的寄存器，并通过 `ioctl` 报告给应用程序。
+[基础 10] 第六节有更完整的对照。

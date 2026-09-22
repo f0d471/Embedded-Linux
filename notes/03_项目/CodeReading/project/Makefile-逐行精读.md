@@ -1,6 +1,6 @@
 # Makefile 逐行精读
 
-对应代码：`project/Makefile`，70 行。
+对应代码：`project/Makefile`，85 行。
 
 前置：make 的规则模型、模式规则、自动变量、`$(wildcard)` 与 `$(patsubst)`、
 `-MMD -MP` 的作用，见 [`notes/01_应用编程/01_工具链与构建系统.md`](../../../01_应用编程/01_工具链与构建系统.md)
@@ -97,7 +97,7 @@ ARCH    := $(if $(CROSS),$(firstword $(subst -, ,$(CROSS))),x86)
 
 ---
 
-## 4. 路径与源文件收集（第 18 到 27 行）
+## 4. 路径与源文件收集（第 18 到 35 行）
 
 ```makefile
 TARGET  := product_tool
@@ -109,7 +109,15 @@ SUBDIRS := display input font ui page business
 
 SRCS    := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))
 OBJS    := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
-DEPS    := $(OBJS:.o=.d)
+
+# 单测: 每个 unittest/xxx.c 自己带 main, 单独链成 build/<arch>/unittest/xxx,
+# 链接时带上除 main.o 外的全部 .o。unittest 不进 SUBDIRS, 否则它的 main
+# 会被链进 product_tool 和 main.c 撞车。
+TEST_SRCS := $(wildcard unittest/*.c)
+TESTS     := $(patsubst %.c,$(BUILD)/%,$(TEST_SRCS))
+LIB_OBJS  := $(filter-out $(BUILD)/main.o,$(OBJS))
+
+DEPS    := $(OBJS:.o=.d) $(TESTS:=.d)
 ```
 
 `SRCS` 分两段：顶层的 `*.c`（`main.c` 和 `common.c`），
@@ -121,8 +129,9 @@ DEPS    := $(OBJS:.o=.d)
 
 **为什么不用 `$(wildcard */*.c)` 一把收完。**
 那样会把以后可能出现的任何目录都收进来，包括 `build/`（虽然 `build/` 下没有 `.c`）、
-以后可能加的 `unittest/`（那里面会有自己的 `main()`，链接时报重复定义）、
-以及资料仓拷进来做参考的目录。列出 `SUBDIRS` 是一道白名单，
+以及资料仓拷进来做参考的目录。第 03 章加的 `unittest/` 正是这条白名单挡住的第一个例子：
+那里面每个文件都有自己的 `main()`，被 `SRCS` 收进去就会和 `main.c` 撞车。
+列出 `SUBDIRS` 是一道白名单，
 代价是加一层要改这一行——这是第 3 节说的"加一层动两处"里没算进去的第三处，
 因为加层这件事在整个项目里只会发生六次，而且已经发生完了。
 
@@ -133,9 +142,22 @@ DEPS    := $(OBJS:.o=.d)
 `$(OBJS:.o=.d)` 是 `$(patsubst %.o,%.d,$(OBJS))` 的简写。
 `.d` 文件和 `.o` 放在一起，一个源文件对应一对。
 
+后面三行是第 03 章加的，为了 `make test`：
+
+`TESTS` 用 `$(patsubst %.c,$(BUILD)/%,...)`，替换成的是**没有后缀**的名字，
+因为单测的产物是可执行文件不是 `.o`。`unittest/disp_test.c` 变成
+`build/x86/unittest/disp_test`。
+
+`LIB_OBJS` 是 `$(filter-out $(BUILD)/main.o,$(OBJS))`：全部 `.o` 去掉 `main.o`。
+一个函数解决了"单测该链哪些文件"——它要整棵树的实现，唯独不要那个 `main`。
+
+`$(TESTS:=.d)` 里替换模式是空的，效果是给列表每一项**末尾加 `.d`**。
+这几个 `.d` 必须并进 `DEPS`，否则改了 `disp_manager.h` 之后单测不会重编，
+人会对着一个用旧头文件编出来的程序调试。
+
 ---
 
-## 5. 编译选项（第 29 到 32 行）
+## 5. 编译选项（第 37 到 40 行）
 
 ```makefile
 # -I. 让跨层引用写成 "display/disp_manager.h", 一眼看得出是跨层
@@ -169,7 +191,7 @@ LDLIBS  :=
 
 ---
 
-## 6. 静默开关（第 34 到 38 行）
+## 6. 静默开关（第 42 到 46 行）
 
 ```makefile
 ifeq ($(V),1)
@@ -191,10 +213,10 @@ endif
 
 ---
 
-## 7. 链接规则（第 40 到 47 行）
+## 7. 链接规则（第 48 到 62 行）
 
 ```makefile
-.PHONY: all clean distclean show
+.PHONY: all test clean distclean show
 
 all: $(BIN)
 
@@ -202,9 +224,16 @@ $(BIN): $(OBJS)
 	@mkdir -p $(dir $@)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+test: $(TESTS)
+
+$(BUILD)/unittest/%: $(BUILD)/unittest/%.o $(LIB_OBJS)
+	@mkdir -p $(dir $@)
+	@echo "  LD    $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 ```
 
-`.PHONY` 声明四个假想目标。不声明的话，目录里如果真有一个叫 `clean` 的文件，
+`.PHONY` 声明五个假想目标。不声明的话，目录里如果真有一个叫 `clean` 的文件，
 `make clean` 会认为目标已经是最新的而什么都不做。这个坑在
 `notes/01` 第 4 节有实验。`all` 也要声明，理由相同。
 
@@ -214,7 +243,7 @@ $(BIN): $(OBJS)
 因为 `mkdir` 的回显没有调试价值。
 
 `@echo "  LD    $@"` 是自己打的简化提示，形状仿 Linux 内核的构建输出。
-它有一个副作用：`check.sh` 第 88 行用 `grep -c '^  CC '` 数重编了几个文件，
+它有一个副作用：`check.sh` 第 93 行用 `grep -c '^  CC '` 数重编了几个文件，
 数的就是这类提示行。**改这里的格式会让那条判据失效**，
 而且是静默失效——`grep -c` 会数到 0，判据变红，还算看得见；
 如果改成前面多一个空格，判据会一直数到 0 并且红，容易被当成代码问题去查。
@@ -223,9 +252,27 @@ $(BIN): $(OBJS)
 
 `$(LDLIBS)` 在 `$^` 之后，理由见第 5 节。
 
+### 7.1 `test` 目标（第 57 到 62 行）
+
+`test: $(TESTS)` 本身不带命令，它只是"把这批产物造出来"。
+
+下面那条是**模式规则**：`%` 匹配任意名字（现在只有 `disp_test`）。
+依赖有两部分：自己的 `.o`，加上 `LIB_OBJS`（除 `main.o` 外的全部）。
+命令和链接 `product_tool` 那条完全一样。
+
+`unittest/disp_test.c` 怎么编成 `.o`？靠的是下一节那条通用规则 `$(BUILD)/%.o: %.c`——
+它匹配任意路径，不要求这个目录在 `SUBDIRS` 里。
+**所以 `unittest/` 能被编，却不会被链进 `product_tool`**，
+这正是想要的分工：`SUBDIRS` 决定"谁进主程序"，通用规则决定"谁能被编"。
+
+`make test` 的末尾会看到一行 `rm build/x86/unittest/disp_test.o`。
+这是 make 的既定行为：由模式规则产生、又只被当成中间依赖的文件，用完就删。
+代价是每次 `make test` 都重编这一个文件，可以接受；
+要留住它就得加 `.PRECIOUS`，但那会让判据 `[4]` 数到的文件数变化，不值得。
+
 ---
 
-## 8. 编译规则与自动依赖（第 49 到 57 行）
+## 8. 编译规则与自动依赖（第 64 到 72 行）
 
 ```makefile
 # -MMD 顺带生成 .d 文件, 内容是 "xxx.o: xxx.c a.h b.h ...", 实现头文件自动依赖
@@ -274,7 +321,7 @@ make 里 `include` 进来的规则不影响"第一个目标是谁"，
 
 ---
 
-## 9. 调试目标与清理（第 59 到 70 行）
+## 9. 调试目标与清理（第 74 到 85 行）
 
 ```makefile
 # 排查 Makefile 变量展开用
@@ -300,7 +347,7 @@ distclean:
 实际上另一棵还在。收益是交叉编译时不会误伤本机产物——
 `make clean && make CROSS=...` 这个常见序列不会把 x86 产物删掉。
 
-`check.sh` 第 59 到 62 行专门量这个区别：`clean` 之后剩 1 份产物，
+`check.sh` 第 64 到 67 行专门量这个区别：`clean` 之后剩 1 份产物，
 `distclean` 之后 `build/` 目录都不在了。
 
 `distclean` 里写的是字面量 `build` 而不是 `$(dir $(BUILD))`。
@@ -340,7 +387,7 @@ distclean:
 `.d` 是这次才生成的，读的是上次的。第一次构建本来就要编全部文件，
 所以没有影响；但如果你 `make clean` 之后立刻 `touch include/common.h` 再 `make`，
 量到的"全量重编"是因为产物不存在，不是因为依赖生效。
-`check.sh` 第 84 到 88 行的顺序（先完整 `make` 一次，再 `touch`，再 `make`）
+`check.sh` 第 89 到 93 行的顺序（先完整 `make` 一次，再 `touch`，再 `make`）
 就是为了避开这个陷阱。
 
 ---
@@ -368,14 +415,20 @@ distclean:
 
 | 谁 | 用到的部分 |
 |---|---|
-| `check.sh` 第 36 行等 | 直接 `make`，量默认目标 |
-| `check.sh` 第 55 行 | `make CROSS=$CROSS_PREFIX`，量交叉编译 |
-| `check.sh` 第 59、61 行 | `make clean` 与 `make distclean` 的区别 |
-| `check.sh` 第 77 行 | 用 `sed` 把 `SRCS` 那一行换成写死清单做注错 |
-| `check.sh` 第 88、95 行 | `grep -c '^  CC '` 数重编文件数 |
-| `check.sh` 第 91 行 | `sed 's/ -MMD -MP//'` 去掉自动依赖做注错 |
-| `check.sh` 第 100 行 | `make CFLAGS_EXTRA=-DLOG_LEVEL=0` |
+| `check.sh` 第 41 行等 | 直接 `make`，量默认目标 |
+| `check.sh` 第 60 行 | `make CROSS=$CROSS_PREFIX`，量交叉编译 |
+| `check.sh` 第 64、66 行 | `make clean` 与 `make distclean` 的区别 |
+| `check.sh` 第 82 行 | 用 `sed` 把 `SRCS` 那一行换成写死清单做注错 |
+| `check.sh` 第 93、100 行 | `grep -c '^  CC '` 数重编文件数 |
+| `check.sh` 第 96 行 | `sed 's/ -MMD -MP//'` 去掉自动依赖做注错 |
+| `check.sh` 第 105 行 | `make CFLAGS_EXTRA=-DLOG_LEVEL=0` |
+| `check.sh` 第 192 行等 | `make test`，量单测产物 |
+| `check.sh` 第 278、285 行 | `make test CFLAGS_EXTRA=-fsanitize=address LDLIBS=-fsanitize=address` |
 
-`check.sh` 第 77 行那个 `sed` 匹配的是行首的 `SRCS `（`^SRCS .*`）。
+最后一条同时用上了 `CFLAGS_EXTRA` 和 `LDLIBS` 两个口子：ASan 要求编译和链接
+两边都带 `-fsanitize=address`，少一边会链接失败。这是 `LDLIBS` 留空到现在
+第一次真正派上用场。
+
+`check.sh` 第 82 行那个 `sed` 匹配的是行首的 `SRCS `（`^SRCS .*`）。
 把变量改名或者改成 `SRCS:=`（等号前没有空格）都会让这条注错静默失效。
 改这一行时要跑一次 `check.sh` 确认 `[3r]` 那一组仍然报红。
