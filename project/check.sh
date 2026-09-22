@@ -14,6 +14,10 @@ set -u
 SRC=$(cd "$(dirname "$0")" && pwd)
 CROSS_PREFIX=${CROSS_PREFIX:-arm-linux-gnueabihf-}
 
+# 本机上没有 /dev/fb0, display 层缺省选 fb 会 init 失败, 整个框架起不来。
+# 这里统一选假显存后端, [7] 组里再单独验 fb 后端的失败路径。
+export DISP_DEV=mem
+
 PASS=0; FAIL=0; SKIP=0
 
 ck()   { if [ "$2" = "$3" ]; then echo "  PASS  $1 = $2"; PASS=$((PASS+1));
@@ -28,7 +32,8 @@ cp -r "$SRC" "$W/project"
 cd "$W/project" || exit 1
 rm -rf build
 
-NSRC=$(find . -name '*.c' -not -path './build/*' | wc -l)
+# unittest/ 由 make test 单独编, make 不碰它, 所以不算进"应该重编的文件数"
+NSRC=$(find . -name '*.c' -not -path './build/*' -not -path './unittest/*' | wc -l)
 INIT_SEQ="display input font ui page business "
 EXIT_SEQ="business page ui font input display "
 
@@ -160,6 +165,140 @@ red "日志文件打不开时系统错误" \
     "$(printf '%s\n' "$bad_out" | sed -n 's|^.*cannot redirect log to /no/such/dir/x.log: ||p')" \
     "device io failed (No such file or directory)"
 cp "$SRC/common.c" common.c
+
+# ---------------------------------------------------------------------------
+# display 层。计数全部由 unittest/count.sh 独立算出来, 被测程序自己不统计。
+# 所有像素判据都跑在行尾有填充的假显存上: 没有填充时算错行宽也看不出来,
+# 见 [7r2]。
+# ---------------------------------------------------------------------------
+
+D32="00000000:2007 000000ff:12 0000ff00:12 00ff0000:12 00ffff00:4 00ffffff:1"
+D16="0000:2007 001f:12 07e0:12 f800:12 ffe0:4 ffff:1"
+PAD32="size 10240 pad_AA 2048 pad_total 2048"
+AT32="at (1,1)=00ff0000 (4,3)=00ff0000 (5,1)=00000000 (6,1)=0000ff00 (11,1)=000000ff (63,31)=00ffffff (63,5)=00ffff00 (62,6)=00ffff00 (61,5)=00000000 (0,0)=00000000"
+
+# 跑一遍单测, 把转储交给 count.sh, 输出三行: size/pad, 像素值分布, 抽查坐标
+disp_run() {
+	m=$1
+	cw=${m%%x*}; t=${m#*x}; chh=${t%%x*}; t=${t#*x}; cb=${t%%x*}; cl=${t##*x}
+	DISP_MEM="$m" DISP_MEM_DUMP="$W/d.raw" \
+		./build/x86/unittest/disp_test >"$W/d.out" 2>&1
+	sh unittest/count.sh "$W/d.raw" "$cw" "$chh" "$cb" "$cl"
+}
+
+echo "[7] display 层: 位置 + 位段 + 边界"
+rm -rf build
+make >/dev/null 2>&1
+make test >/dev/null 2>&1
+ck "make test 产出单测" "$([ -x build/x86/unittest/disp_test ] && echo yes || echo no)" "yes"
+ck "32bpp 像素值分布" "$(disp_run 64x32x32x320 | sed -n 2p)" "$D32"
+ck "32bpp 转储大小与哨兵" "$(disp_run 64x32x32x320 | sed -n 1p)" "$PAD32"
+ck "32bpp 抽查坐标" "$(disp_run 64x32x32x320 | sed -n 3p)" "$AT32"
+ck "越界 put_pixel 被拒" \
+   "$(disp_run 64x32x32x320 >/dev/null; grep '^out of range' "$W/d.out")" \
+   "out of range put_pixel ret -1"
+ck "16bpp 像素值分布(565 三个分量都要对)" "$(disp_run 64x32x16x192 | sed -n 2p)" "$D16"
+
+if command -v python3 >/dev/null 2>&1; then
+	disp_run 64x32x32x320 >"$W/by_sh.txt"
+	ck "count.sh 与 count.py 两个独立实现结果一致" \
+	   "$(python3 unittest/count.py "$W/d.raw" 64 32 32 320 | diff -q - "$W/by_sh.txt" >/dev/null && echo same || echo differ)" \
+	   "same"
+else
+	skip "两个计数实现互校" "没装 python3"
+fi
+
+echo "[7r1] 注错: put_pixel 的行宽换成 xres * bpp / 8"
+sed -i 's@y \* g_buf.line_length@y * (g_buf.xres * g_buf.bpp / 8)@' display/disp_manager.c
+make >/dev/null 2>&1; make test >/dev/null 2>&1
+red "32bpp 像素值分布" "$(disp_run 64x32x32x320 | sed -n 2p)" "$D32"
+red "32bpp 转储大小与哨兵" "$(disp_run 64x32x32x320 | sed -n 1p)" "$PAD32"
+
+echo "[7r2] 同一个错, 换成行尾没有填充的 64x32x32x256"
+ck "行宽算错在无填充的显存上看不出来(所以上面几条必须跑有填充的)" \
+   "$(disp_run 64x32x32x256 | sed -n 2p)" "$D32"
+cp "$SRC/display/disp_manager.c" display/disp_manager.c
+
+echo "[7r3] 注错: put_pixel 去掉 x >= xres 检查"
+sed -i 's@x >= g_buf.xres || @@' display/disp_manager.c
+make >/dev/null 2>&1; make test >/dev/null 2>&1
+red "越界 put_pixel 被拒" \
+    "$(disp_run 64x32x32x320 >/dev/null; grep '^out of range' "$W/d.out")" \
+    "out of range put_pixel ret -1"
+red "32bpp 转储大小与哨兵" "$(disp_run 64x32x32x320 | sed -n 1p)" "$PAD32"
+cp "$SRC/display/disp_manager.c" display/disp_manager.c
+
+echo "[7r4] 注错: 红和蓝的位段对调"
+sed -i -e 's@&g_buf.red)@\&g_buf.XCHG)@' -e 's@&g_buf.blue)@\&g_buf.red)@' \
+       -e 's@&g_buf.XCHG)@\&g_buf.blue)@' display/disp_manager.c
+make >/dev/null 2>&1; make test >/dev/null 2>&1
+red "32bpp 抽查坐标" "$(disp_run 64x32x32x320 | sed -n 3p)" "$AT32"
+cp "$SRC/display/disp_manager.c" display/disp_manager.c
+
+echo "[7r5] 注错: 拼色不缩位, 8 位分量直接挪到 offset"
+sed -i 's@(c8 >> (8 - f->length))@(c8)@' display/disp_manager.c
+make >/dev/null 2>&1; make test >/dev/null 2>&1
+red "16bpp 像素值分布(565 三个分量都要对)" "$(disp_run 64x32x16x192 | sed -n 2p)" "$D16"
+cp "$SRC/display/disp_manager.c" display/disp_manager.c
+
+echo "[7r6] 注错: fill_rect 去掉右边界裁剪"
+sed -i 's@x1 = r->x + r->w > g_buf.xres ? g_buf.xres : r->x + r->w;@x1 = r->x + r->w;@' \
+	display/disp_manager.c
+make >/dev/null 2>&1; make test >/dev/null 2>&1
+ck "fill_rect 的裁剪是冗余的(边界由 put_pixel 兜住), 它防的是以后绕开 put_pixel 的写法" \
+   "$(disp_run 64x32x32x320 | sed -n 2p)" "$D32"
+cp "$SRC/display/disp_manager.c" display/disp_manager.c
+
+echo "[8] fb 后端: 打不开设备时把 fd 还回去"
+# /dev/null 能 open, 但不是帧缓冲, FBIOGET_VSCREENINFO 必定 ENOTTY,
+# 正好停在"fd 已开、ioctl 失败"这一步。
+fb_seq() {
+	DISP_DEV=fb DISP_FB=/dev/null strace -e trace=openat,ioctl,close \
+		-o "$W/s.txt" ./build/x86/product_tool >/dev/null 2>&1
+	sed -n '/"\/dev\/null"/,$p' "$W/s.txt" | head -3 | sed 's/(.*//' | tr '\n' ' '
+}
+if command -v strace >/dev/null 2>&1; then
+	make >/dev/null 2>&1
+	ck "open 成功、ioctl 失败时的系统调用序列" "$(fb_seq)" "openat ioctl close "
+	ck "fb 后端失败时整个程序的退出码" \
+	   "$(DISP_DEV=fb DISP_FB=/dev/null ./build/x86/product_tool >/dev/null 2>&1; echo $?)" "1"
+
+	echo "[8r] 注错: ioctl 失败分支里不调 fb_close"
+	sed -i 's@^\t\tfb_close();\n@@' display/framebuffer.c
+	sed -i '/FBIOGET_\*SCREENINFO failed/{n;/fb_close();/d}' display/framebuffer.c
+	make >/dev/null 2>&1
+	red "open 成功、ioctl 失败时的系统调用序列" "$(fb_seq)" "openat ioctl close "
+	cp "$SRC/display/framebuffer.c" display/framebuffer.c
+else
+	skip "fb 后端失败路径判据" "没装 strace"
+fi
+
+echo "[9] 假显存后端不漏内存"
+make distclean >/dev/null 2>&1
+make test CFLAGS_EXTRA=-fsanitize=address LDLIBS=-fsanitize=address >/dev/null 2>&1
+./build/x86/unittest/disp_test >/dev/null 2>"$W/asan.txt"
+ck "ASan 报告的泄漏条数" "$(grep -c 'ERROR: LeakSanitizer' "$W/asan.txt")" "0"
+
+echo "[9r] 注错: mem_close 里不 free"
+sed -i '/^\tfree(g_mem);$/d' display/memdisp.c
+make distclean >/dev/null 2>&1
+make test CFLAGS_EXTRA=-fsanitize=address LDLIBS=-fsanitize=address >/dev/null 2>&1
+./build/x86/unittest/disp_test >/dev/null 2>"$W/asan2.txt"
+red "ASan 报告的泄漏条数" "$(grep -c 'ERROR: LeakSanitizer' "$W/asan2.txt")" "0"
+ck  "漏掉的正好是一整块假显存(320 x 32)" \
+    "$(sed -n 's/^Direct leak of \([0-9]*\) byte(s) in \([0-9]*\) object(s).*/\1 \2/p' "$W/asan2.txt")" \
+    "10240 1"
+cp "$SRC/display/memdisp.c" display/memdisp.c
+
+echo "[10] 分层边界: 帧缓冲设备只出现在 display 层"
+ck "display/ 以外提到 /dev/fb 的文件数" \
+   "$(grep -rl '/dev/fb' --include='*.c' --include='*.h' . | grep -cv '^\./display/')" "0"
+
+echo "[10r] 注错: 往 page 层塞一行含 /dev/fb0 的注释"
+sed -i '1i /* 这一行故意越界引用 /dev/fb0 */' page/page_manager.c
+red "display/ 以外提到 /dev/fb 的文件数" \
+    "$(grep -rl '/dev/fb' --include='*.c' --include='*.h' . | grep -cv '^\./display/')" "0"
+cp "$SRC/page/page_manager.c" page/page_manager.c
 
 echo
 echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"

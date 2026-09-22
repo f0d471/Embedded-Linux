@@ -24,7 +24,15 @@ SUBDIRS := display input font ui page business
 
 SRCS    := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))
 OBJS    := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
-DEPS    := $(OBJS:.o=.d)
+
+# 单测: 每个 unittest/xxx.c 自己带 main, 单独链成 build/<arch>/unittest/xxx,
+# 链接时带上除 main.o 外的全部 .o。unittest 不进 SUBDIRS, 否则它的 main
+# 会被链进 product_tool 和 main.c 撞车。
+TEST_SRCS := $(wildcard unittest/*.c)
+TESTS     := $(patsubst %.c,$(BUILD)/%,$(TEST_SRCS))
+LIB_OBJS  := $(filter-out $(BUILD)/main.o,$(OBJS))
+
+DEPS    := $(OBJS:.o=.d) $(TESTS:=.d)
 
 # -I. 让跨层引用写成 "display/disp_manager.h", 一眼看得出是跨层
 CFLAGS  := -Wall -Wextra -O2 -I. -Iinclude $(CFLAGS_EXTRA)
@@ -37,11 +45,18 @@ else
   Q := @
 endif
 
-.PHONY: all clean distclean show
+.PHONY: all test clean distclean show
 
 all: $(BIN)
 
 $(BIN): $(OBJS)
+	@mkdir -p $(dir $@)
+	@echo "  LD    $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+test: $(TESTS)
+
+$(BUILD)/unittest/%: $(BUILD)/unittest/%.o $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
