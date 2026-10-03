@@ -281,9 +281,39 @@
             project/check.sh 最终 73 PASS / 0 FAIL / 0 SKIP（52 -> 73）
             CodeReading 重排为一层一篇，共 8 篇（common/display/font/input/
             空壳三层与 main/unittest/Makefile/check 脚本）
-        [ ] 06 网络通信
-        [ ] 07 多线程
-        [ ] 08 I2C
-        [ ] 09 串口
+        [x] 06 网络通信
+            笔记未写(口径:只做 L4);netinput provider 落地:20 字节定长线上格式、
+            get_fds 多 fd 契约、坏客户端整条隔离;发送端吃 replay 同格式文本,
+            同一 fixture 回放/TCP 两路输出逐行相同
+            本机判据 [15]/[15r](计数 + 注错);板上 loopback 5 帧逐行同构
+            (2026-10-04,坐标按 1024x600 缩放);判据 73 -> 83
+            工程文档:TechReports 06 + CodeReading input 篇重写
+        [x] 07 多线程
+            input 层线程化:专职读取线程 + 32 槽环形队列,队满丢最旧,
+            received/delivered/dropped 三本账;cond 绑 CLOCK_MONOTONIC;
+            provider 错误经 g_error 穿透队列(保住 [14] 退出码 2)
+            压力判据 400 帧 received=400 delivered=33 dropped=367 闭合;
+            tsan 无报告,拆锁注错报 7 处竞争;判据 83 -> 90
+            工程文档:TechReports 07
+        [x] 08 I2C
+            items/ap3216_read:i2c-dev 直读,总线自动探测;
+            板上实测 0x1e 在 i2c-0(无设备树节点,用户态唯一通路),
+            六连读数值随采样变化;遮光判据待人工;ALS 撕裂读嫌疑未修
+            板上 strace 抓到探测循环 g_fd 未挂上的真缺陷,已修复
+        [x] 09 串口
+            items/serial_loop:termios raw + PING 帧异或校验 + 回显自检;
+            WSL 判据用伪终端对端(python pty)5/5 全对;板上 ttymxc2/5
+            probe 全通;控制台 ttymxc0 不发数据
+        [x] 项目整合(量产工具路线):config/ui/page/business 四层
+            config 四象限默认值;ui 按钮两态;page 切换即 destroy+create;
+            business 具体页面+fork/exec 命令+主循环(q 键退出)
+            端到端回放链:点击执行命令、两页切换、9 事件退出;
+            板上 GUI 真写 fb(边框像素 0x00909090 实测),mxapp2 已恢复
+            工程文档:TechReports 08/09 + CodeReading 四新篇 + input/main/
+                     Makefile/unittest/check 篇重写,CodeReading 8 篇 -> 12 篇
+            project/check.sh 三套件:check.sh/check_core.sh/check_font_input.sh/
+                     check_gui.sh,TOTAL 124 PASS / 0 FAIL / 0 SKIP(73 -> 124)
     [ ] 阶段 2  驱动开发   PDF 301-495
-    [ ] 阶段 3  项目整合
+        量产工具路线的逐章施工表已全部勾完(notes/03_项目/Todo/
+        项目路线图-对齐电子产品量产工具.md 第四节);现行终点仍是
+        网络视频终端(刀 0 起步)

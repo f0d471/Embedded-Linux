@@ -135,9 +135,12 @@ static void evdev_close(void)
 	}
 }
 
-static int evdev_get_fd(void)
+static int evdev_get_fds(int *fds, int max)
 {
-	return g_fd;
+	if (max < 1)
+		return ERR_PARAM;
+	fds[0] = g_fd;
+	return 1;
 }
 
 static int evdev_read_raw(struct input_raw_event *out)
@@ -168,7 +171,7 @@ static struct input_provider g_evdev = {
 	.name = "evdev",
 	.open = evdev_open,
 	.close = evdev_close,
-	.get_fd = evdev_get_fd,
+	.get_fds = evdev_get_fds,
 	.read_raw = evdev_read_raw,
 };
 

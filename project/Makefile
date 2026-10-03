@@ -20,7 +20,7 @@ BUILD   := build/$(ARCH)
 BIN     := $(BUILD)/$(TARGET)
 
 # 加一个新层时只改这一行
-SUBDIRS := display input font ui page business
+SUBDIRS := display input font ui page config business
 
 SRCS    := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))
 OBJS    := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
@@ -32,7 +32,13 @@ TEST_SRCS := $(wildcard unittest/*.c)
 TESTS     := $(patsubst %.c,$(BUILD)/%,$(TEST_SRCS))
 LIB_OBJS  := $(filter-out $(BUILD)/main.o,$(OBJS))
 
-DEPS    := $(OBJS:.o=.d) $(TESTS:=.d)
+# 测试项程序(items/): 08/09 章的独立小工具(i2c 读光感、串口收发),
+# 只链 common.o, 不带层和 FreeType -- 它们就是普通的应用编程练习,
+# 上板单发。items 也不进 SUBDIRS。
+ITEM_SRCS := $(wildcard items/*.c)
+ITEMS     := $(patsubst %.c,$(BUILD)/%,$(ITEM_SRCS))
+
+DEPS    := $(OBJS:.o=.d) $(TESTS:=.d) $(ITEMS:=.d)
 
 # FreeType: x86 走系统 pkg-config；ARM 从资料包源码隔离构建到当前架构产物树。
 ifeq ($(ARCH),arm)
@@ -54,9 +60,12 @@ endif
 # FreeType 的头文件目录属于预处理选项，库放在对象文件之后的 LDLIBS。
 CPPFLAGS := -I. -Iinclude $(FREETYPE_CFLAGS) $(CPPFLAGS_EXTRA)
 CFLAGS   := -Wall -Wextra -Werror -O2 $(CFLAGS_EXTRA)
-LDFLAGS  :=
+LDFLAGS  := $(LDFLAGS_EXTRA)
 LDLIBS   :=
 override LDLIBS += $(FREETYPE_LIBS)
+# 读取线程在 input 层内部; -pthread 放在 override 里, 命令行 LDFLAGS=-static
+# 覆盖 LDFLAGS 本体时也保得住。
+override LDFLAGS += -pthread
 
 ifeq ($(V),1)
   Q :=
@@ -73,12 +82,17 @@ $(BIN): $(OBJS)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-test: $(TESTS)
+test: $(TESTS) $(ITEMS)
 
 $(BUILD)/unittest/%: $(BUILD)/unittest/%.o $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(BUILD)/items/%: $(BUILD)/items/%.o $(BUILD)/common.o
+	@mkdir -p $(dir $@)
+	@echo "  LD    $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^
 
 # -MMD 顺带生成 .d 文件, 内容是 "xxx.o: xxx.c a.h b.h ...", 实现头文件自动依赖
 # -MP  为每个头文件补一条空规则, 这样删掉一个头文件时 make 不会报 No rule to make target

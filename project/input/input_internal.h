@@ -17,7 +17,9 @@ struct input_provider {
 	const char *name;
 	int  (*open)(struct input_source_info *out);
 	void (*close)(void);
-	int  (*get_fd)(void);
+	/* 把本轮 poll 要监听的 fd 填进 fds, 返回个数。netinput 这类
+	 * "监听 + 客户端" 的后端, 个数会随连接的建立与断开变化。 */
+	int  (*get_fds)(int *fds, int max);
 	int  (*read_raw)(struct input_raw_event *out);
 	struct input_provider *next;
 };
@@ -25,5 +27,6 @@ struct input_provider {
 void input_register(struct input_provider *provider);
 void evdev_register(void);
 void replay_register(void);
+void netinput_register(void);
 
 #endif /* __INPUT_INTERNAL_H */

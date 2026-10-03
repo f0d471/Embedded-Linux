@@ -83,4 +83,4 @@
 
 | 系列 | 覆盖范围 | 篇数 |
 |---|---|---|
-| [project/](project/) | 骨架、日志落文件、display、font、input 与判据体系 | 5 |
+| [project/](project/) | 骨架、日志落文件、display、font、input、netinput、多线程、GUI 四层与测试项、判据体系 | 9 |

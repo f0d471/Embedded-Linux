@@ -32,17 +32,22 @@ cp -r "$SRC" "$W/project"
 cd "$W/project" || exit 1
 rm -rf build
 
-# unittest/ 由 make test 单独编, make 不碰它, 所以不算进"应该重编的文件数"
-NSRC=$(find . -name '*.c' -not -path './build/*' -not -path './unittest/*' | wc -l)
-INIT_SEQ="display input font ui page business "
-EXIT_SEQ="business page ui font input display "
+# business 主循环取事件的超时走配置; 判据里给它一个短超时, 否则默认配置
+# (page_timeout_ms = 0 永久等待)会让 product_tool 在无输入时挂死。
+printf '[global]\npage_timeout_ms = 300\n' > etc_check.conf
+export CONFIG_FILE=etc_check.conf
+
+# unittest/ 与 items/ 由 make test 单独编, make 不碰它们, 不算进"应该重编的文件数"
+NSRC=$(find . -name '*.c' -not -path './build/*' -not -path './unittest/*' -not -path './items/*' | wc -l)
+INIT_SEQ="display input font ui page config business "
+EXIT_SEQ="business config page ui font input display "
 
 echo "[1] 构建 + 分层启停顺序    (源文件 $NSRC 个)"
 make >/dev/null 2>&1
 out=$(./build/x86/product_tool 2>&1); rc=$?
 ck "退出码"        "$rc" "0"
-ck "init OK 行数"  "$(echo "$out" | grep -c 'init OK')" "6"
-ck "exit OK 行数"  "$(echo "$out" | grep -c 'exit OK')" "6"
+ck "init OK 行数"  "$(echo "$out" | grep -c 'init OK')" "7"
+ck "exit OK 行数"  "$(echo "$out" | grep -c 'exit OK')" "7"
 ck "init 顺序"     "$(echo "$out" | grep 'init OK' | awk '{print $(NF-2)}' | tr '\n' ' ')" "$INIT_SEQ"
 ck "exit 顺序反向" "$(echo "$out" | grep 'exit OK' | awk '{print $(NF-2)}' | tr '\n' ' ')" "$EXIT_SEQ"
 
@@ -50,8 +55,8 @@ echo "[1r] 注错: 从 main.c 的层表里删掉 business 那一行"
 sed -i '/{ "business",/d' main.c
 make >/dev/null 2>&1
 out2=$(./build/x86/product_tool 2>&1)
-red "init OK 行数" "$(echo "$out2" | grep -c 'init OK')" "6"
-ck  "其余 5 层照常启停(层间无隐式耦合)" "$(echo "$out2" | grep -c 'exit OK')" "5"
+red "init OK 行数" "$(echo "$out2" | grep -c 'init OK')" "7"
+ck  "其余 6 层照常启停(层间无隐式耦合)" "$(echo "$out2" | grep -c 'exit OK')" "6"
 cp "$SRC/main.c" main.c
 
 echo "[2] 交叉编译 + 两个架构的产物并存"
@@ -111,11 +116,11 @@ rm -rf build
 make >/dev/null 2>&1
 LOGF="$W/run.log"
 rm -f "$LOGF"
-ck "不设 LOG_FILE 时终端行数" "$(./build/x86/product_tool 2>&1 | wc -l)" "13"
+ck "不设 LOG_FILE 时终端行数" "$(./build/x86/product_tool 2>&1 | wc -l)" "20"
 ck "设了 LOG_FILE 时终端行数" "$(LOG_FILE=$LOGF ./build/x86/product_tool 2>&1 | wc -l)" "0"
-ck "第一次跑完文件行数"       "$(wc -l < "$LOGF")" "13"
+ck "第一次跑完文件行数"       "$(wc -l < "$LOGF")" "20"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
-ck "第二次跑完文件行数(O_APPEND 接着写)" "$(wc -l < "$LOGF")" "26"
+ck "第二次跑完文件行数(O_APPEND 接着写)" "$(wc -l < "$LOGF")" "40"
 bad_out=$(LC_ALL=C LOG_FILE=/no/such/dir/x.log ./build/x86/product_tool 2>&1); bad_rc=$?
 ck "日志文件打不开时退出码" "$bad_rc" "1"
 ck "日志文件打不开时系统错误" \
@@ -131,8 +136,8 @@ if command -v strace >/dev/null 2>&1; then
 	rm -f "$LOGF"
 	strace -f -e trace=write -o "$W/tw.txt" \
 		env LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
-	ck "13 条日志对应 13 次 write(2,...)" \
-	   "$(grep -cE '(^|[0-9]+ +)write\(2,' "$W/tw.txt")" "13"
+	ck "20 条日志对应 20 次 write(2,...)" \
+	   "$(grep -cE '(^|[0-9]+ +)write\(2,' "$W/tw.txt")" "20"
 else
 	skip "stderr 无缓冲判据" "没装 strace"
 fi
@@ -144,7 +149,7 @@ make >/dev/null 2>&1
 rm -f "$LOGF"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
-red "第二次跑完文件行数" "$(wc -l < "$LOGF")" "26"
+red "第二次跑完文件行数" "$(wc -l < "$LOGF")" "40"
 
 echo "[6r2] 注错: 去掉 dup2, 日志去向没有从终端改成文件"
 cp "$SRC/common.c" common.c
@@ -153,7 +158,7 @@ rm -rf build
 make >/dev/null 2>&1
 rm -f "$LOGF"
 LOG_FILE=$LOGF ./build/x86/product_tool >/dev/null 2>&1
-red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "13"
+red "第一次跑完文件行数" "$(wc -l < "$LOGF")" "20"
 cp "$SRC/common.c" common.c
 
 echo "[6r3] 注错: open 失败时不带出 errno"

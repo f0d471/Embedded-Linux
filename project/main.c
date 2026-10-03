@@ -8,6 +8,7 @@
 #include "font/font_manager.h"
 #include "ui/ui_manager.h"
 #include "page/page_manager.h"
+#include "config/config.h"
 #include "business/business_manager.h"
 
 struct layer {
@@ -23,6 +24,7 @@ static const struct layer g_layers[] = {
 	{ "font",     font_init,     font_exit     },
 	{ "ui",       ui_init,       ui_exit       },
 	{ "page",     page_init,     page_exit     },
+	{ "config",   config_init,   config_exit   },
 	{ "business", business_init, business_exit },
 };
 
@@ -53,11 +55,10 @@ static int layers_init(void)
 	return ERR_OK;
 }
 
-// 主循环
+// 主循环: 事件从 input 层进来, 页面分发在 business 层, 这里只负责调它
 static int main_loop(void)
 {
-	LOG_INFO("framework is up, no page to run yet");
-	return ERR_OK;
+	return business_run();
 }
 
 int main(int argc, char **argv)

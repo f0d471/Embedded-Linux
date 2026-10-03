@@ -1,32 +1,23 @@
 # Makefile 逐行精读
 
-对应代码：`project/Makefile`（123 行）。
+对应代码：`project/Makefile`（137 行，`grep -n ''` 于 2026-10-04 核对）。
 
 ## 1. 文件定位
 
-非递归单份 Makefile，管 x86/ARM 两条产物树、unittest 三个可执行、ARM 上
-FreeType 2.10.2 的首次隔离构建。设计约束写在头部：新增一个 `.c` 到已列出的
-子目录不需要改本文件（判据 [3] 用一个临时文件验证，[3r] 注错换成写死清单见红）。
+非递归单份 Makefile，管 x86/ARM 两条产物树、unittest 七个可执行、items
+两个测试项程序、ARM 上 FreeType 2.10.2 的首次隔离构建。设计约束写在
+头部：新增一个 `.c` 到已列出的子目录不需要改本文件（判据 [3] 用一个
+临时文件验证，[3r] 注错换成写死清单见红）。
 
-前置知识：[从零开始读写 project 代码](../00-从零开始读写项目代码.md)第 9.1 节；
-第 01 章笔记（构建系统）。
+与旧版（TechReports 08 之前的 123 行）的差别集中在四处：`SUBDIRS`
+加 config；新增 items 目标；`LDFLAGS` 的 pthread 用 `override` 追加；
+unittest 计数从 3 到 7。
 
-## 2. 正文
+## 2. 变量区
 
-### 第 1—16 行：用法与架构推导
+### [12-23] 架构派生与层表
 
-```makefile
-# 网络视频终端项目顶层 Makefile
-#
-# 用法:
-#   make                                本地 x86 版, 产物 build/x86/product_tool
-#   make CROSS=arm-linux-gnueabihf-     ARM 版；首次自动隔离构建静态 FreeType
-#   make V=1                            显示完整编译命令
-#   make clean                          只删当前架构的产物
-#   make distclean                      删掉整个 build/
-#
-# 设计约束: 新增一个 .c 到任何已列出的子目录, 不需要修改本文件。
-
+```make
 CROSS   ?=
 CC      := $(CROSS)gcc
 
@@ -36,20 +27,18 @@ ARCH    := $(if $(CROSS),$(firstword $(subst -, ,$(CROSS))),x86)
 TARGET  := product_tool
 BUILD   := build/$(ARCH)
 BIN     := $(BUILD)/$(TARGET)
+
+# 加一个新层时只改这一行
+SUBDIRS := display input font ui page config business
 ```
 
-`ARCH` 一行做三件事：`subst` 把 `arm-linux-gnueabihf-` 按连字符拆成词表，
-`firstword` 取第一个词，`$(if ...)` 在 `CROSS` 为空时落到 x86。架构名同时是
-产物树名，两套工具链的 `.o` 永不相混（判据 [2] 验证两份产物并存与
-`make clean` 只清当前架构）。`CROSS ?=` 允许命令行覆盖，
-`:=` 让 `CC/ARCH/BUILD` 只展开一次。
+`ARCH` 从工具链前缀拆出来，两条产物树 `build/x86` 与 `build/arm` 由此
+并存（判据 [2] 验证并存与 `make clean` 只清当前架构）。config 加入
+`SUBDIRS` 是第 08 章唯一的构建系统改动。
 
-### 第 22—35 行：源码收集与单测
+### [25-45] 三类源与三份清单
 
-```makefile
-# 加一个新层时只改这一行
-SUBDIRS := display input font ui page business
-
+```make
 SRCS    := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))
 OBJS    := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))
 
@@ -60,17 +49,25 @@ TEST_SRCS := $(wildcard unittest/*.c)
 TESTS     := $(patsubst %.c,$(BUILD)/%,$(TEST_SRCS))
 LIB_OBJS  := $(filter-out $(BUILD)/main.o,$(OBJS))
 
-DEPS    := $(OBJS:.o=.d) $(TESTS:=.d)
+# 测试项程序(items/): 08/09 章的独立小工具(i2c 读光感、串口收发),
+# 只链 common.o, 不带层和 FreeType -- 它们就是普通的应用编程练习,
+# 上板单发。items 也不进 SUBDIRS。
+ITEM_SRCS := $(wildcard items/*.c)
+ITEMS     := $(patsubst %.c,$(BUILD)/%,$(ITEM_SRCS))
+
+DEPS    := $(OBJS:.o=.d) $(TESTS:=.d) $(ITEMS:=.d)
 ```
 
-`wildcard` 在 make 读入时展开，新文件下一次 make 自动进来。`unittest` 的
-三个 `main` 是核心冲突：`TEST_SRCS` 单列、链接时 `filter-out` 掉 `main.o`，
-`product_tool` 与三个单测各得各的 main。注释里写了"不进 SUBDIRS"的后果，
-这条约束由目录划分天然保证。
+三个 wildcard 各管一类 main：`SRCS` 里的 main.c 归 product_tool，
+`TEST_SRCS` 每个文件自带 main，`ITEM_SRCS` 同理。判据 [4]"改
+common.h 全量重编"的计数 = `NSRC`（core 判据里 find 出的、不含
+unittest 与 items 的 .c 数），依赖 `.d` 文件把头文件依赖挂到每个
+目标上——items 也依赖 common.h，所以它的 `.d` 必须进 `DEPS`，
+否则 [4] 的重编数对不上。
 
-### 第 37—59 行：FreeType 双路
+### [47-71] FreeType 与编译选项
 
-```makefile
+```make
 # FreeType: x86 走系统 pkg-config；ARM 从资料包源码隔离构建到当前架构产物树。
 ifeq ($(ARCH),arm)
   FT_VERSION  := 2.10.2
@@ -91,25 +88,24 @@ endif
 # FreeType 的头文件目录属于预处理选项，库放在对象文件之后的 LDLIBS。
 CPPFLAGS := -I. -Iinclude $(FREETYPE_CFLAGS) $(CPPFLAGS_EXTRA)
 CFLAGS   := -Wall -Wextra -Werror -O2 $(CFLAGS_EXTRA)
-LDFLAGS  :=
+LDFLAGS  := $(LDFLAGS_EXTRA)
 LDLIBS   :=
 override LDLIBS += $(FREETYPE_LIBS)
+# 读取线程在 input 层内部; -pthread 放在 override 里, 命令行 LDFLAGS=-static
+# 覆盖 LDFLAGS 本体时也保得住。
+override LDFLAGS += -pthread
 ```
 
-ARM 路径的四个目录变量都在 `build/$(ARCH)` 下，两架构互不污染；`?=` 允许
-判据脚本从环境注入绝对路径（check.sh 里 `FT_TARBALL=...`，TechReport 04
-4.3 节的教训：相对路径在 `/tmp` 副本里失效）。x86 的 `2>/dev/null` 让没装
-FreeType 的机器给出干净的链接错误而不是 shell 报错。
+两个 `override` 是本章的关键新增。`override LDFLAGS += -pthread`：
+命令行 `make LDFLAGS=-static`（板上产物必需，TechReports 03 记过
+glibc 版本冲突）会替换 `LDFLAGS :=` 的赋值，`override` 的 `+=`
+在命令行赋值之后追加，两种取值下链接命令都带 `-pthread`。判据 [17]
+的 tsan 构建走 `LDFLAGS_EXTRA`/`CFLAGS_EXTRA`，与 sanitizer 的
+既有用法（判据 [9] 的 ASan）一致。
 
-`-I.` 与 `-Iinclude` 配合的是"跨层引用带目录前缀"的写法：
-`#include "display/disp_manager.h"` 在引用处就暴露跨层关系。
-`override LDLIBS +=`——命令行传的 `LDLIBS`（判据的 ASan 用法
-`LDLIBS=-fsanitize=address`）会覆盖普通 `+=`，`override` 让 FreeType 库
-无论如何都追加在后面，两不相失。
+### [73-135] 规则区
 
-### 第 61—88 行：规则
-
-```makefile
+```make
 ifeq ($(V),1)
   Q :=
 else
@@ -125,12 +121,17 @@ $(BIN): $(OBJS)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-test: $(TESTS)
+test: $(TESTS) $(ITEMS)
 
 $(BUILD)/unittest/%: $(BUILD)/unittest/%.o $(LIB_OBJS)
 	@mkdir -p $(dir $@)
 	@echo "  LD    $@"
 	$(Q)$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+$(BUILD)/items/%: $(BUILD)/items/%.o $(BUILD)/common.o
+	@mkdir -p $(dir $@)
+	@echo "  LD    $@"
+	$(Q)$(CC) $(LDFLAGS) -o $@ $^
 
 # -MMD 顺带生成 .d 文件, 内容是 "xxx.o: xxx.c a.h b.h ...", 实现头文件自动依赖
 # -MP  为每个头文件补一条空规则, 这样删掉一个头文件时 make 不会报 No rule to make target
@@ -138,18 +139,7 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
 	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
-```
 
-`Q` 是静默开关：`V=1` 时命令回显（`$(Q)` 为空），否则命令带 `@` 静默执行，
-echo 的缩进格式照常打出。静态模式规则 `$(BUILD)/%.o: %.c` 一条管全部
-`.c`，`$<` 是第一个前提（源文件）。`-MMD -MP` 的两条注释就是意图：
-`.d` 文件由编译器生成（头文件依赖不会过期），`-MP` 补空规则防删头文件报错。
-判据 [4]/[4r] 用"touch common.h 后重编文件数"钉住这条：去掉 `-MMD -MP`
-后 touch 不再触发重编，见红。
-
-### 第 90—109 行：ARM 的 FreeType 构建挂接
-
-```makefile
 ifeq ($(ARCH),arm)
 $(FT_STAMP):
 	@test -f "$(FT_TARBALL)" || { echo "missing $(FT_TARBALL)"; exit 1; }
@@ -170,20 +160,7 @@ endif
 
 # -include 对不存在的文件不报错, 所以第一次编译时不需要再套一层 wildcard 过滤
 -include $(DEPS)
-```
 
-stamp 规则只该跑一次：`.installed` 存在后目标已满足，不再重解压。
-`--host=$(patsubst %-,%,$(CROSS))` 去掉尾缀连字符得到
-`arm-linux-gnueabihf`，configure 的交叉三元组与工具链前缀同源。
-`--without-*` 把可选依赖全关掉，产物只依赖 libc，板上少一批动态库要求。
-依赖挂接分两条：`font_freetype.o` 是普通前置（stamp 变了就重编），
-`$(BIN) $(TESTS)` 用 `|` order-only——链接不需要因为 stamp 时间戳变化而
-重跑，只需要 stamp 先存在。`-include` 对缺失文件静默，首次构建时
-`.d` 还不存在也不报错。
-
-### 第 111—123 行：辅助目标
-
-```makefile
 # 排查 Makefile 变量展开用
 show:
 	@echo "ARCH  = $(ARCH)"
@@ -199,39 +176,39 @@ distclean:
 	rm -rf build
 ```
 
-`clean` 只删当前架构（`BUILD`），`distclean` 删整棵 `build/`；判据 [2]
-验证两者差一档。`show` 打印关键变量的最终展开值，排查 wildcard/FreeType
-路径问题从它开始。
+三条链接规则三种料：product_tool 吃全部 OBJS 加 LDLIBS（FreeType 在内）；
+unittest 吃 `LIB_OBJS`（除 main.o）加 LDLIBS——netinput_send 因此也
+带着七层代码，3.2MB 的 ARM 产物里九成不是它的；items 只吃 common.o，
+不带 FreeType，0.5MB，串口上传时间从三分钟降到四十秒。ARM 段的
+FreeType 隔离构建与 stamp 依赖照旧；`$(BIN) $(TESTS): | $(FT_STAMP)`
+的 order-only 前置保证 stamp 只触发 FreeType 目录存在性检查，不参与
+时间戳比较。
 
 ## 3. 执行顺序
 
-```
-make(首次, x86):   读入 → wildcard 收源 → 无 .d, -include 静默
-                   → 逐个编 .o(-MMD 生成 .d) → 链 product_tool
-make(ARM 首次):    同上 + FT_STAMP 不存在 → 解压/configure/make/install
-                   → touch stamp → font_freetype.o → 链接
-touch common.h:    .d 里 "disp_manager.o: include/common.h ..." 命中 → 相关 .o 全重编
-make test:         TESTS 三个可执行, 链接时 LIB_OBJS(无 main.o) + FreeType 库
-```
+| 步 | `make`（x86 默认） | `make CROSS=arm-linux-gnueabihf- LDFLAGS=-static` |
+|---|---|---|
+| 变量 | ARCH=x86，FreeType 走 pkg-config | ARCH=arm，FreeType 指向隔离 stage |
+| 编译 | build/x86/ 下全部 .o（含 config/） | build/arm/ 下全部 .o（静态，-pthread 由 override 保留） |
+| 链接 | product_tool + LDLIBS | FT_STAMP 不在 → 先解包构建 FreeType → 再链 |
+| test | make test 补 7 单测 + 2 items | 同规则静态版，判据 [2] 验 Machine=ARM |
 
 ## 4. 容易读错的地方
 
-- `ARCH` 由 `CROSS` 推导，`make CC=arm-linux-gnueabihf-gcc` 不会切架构，
-  必须传 `CROSS=`。
-- `unittest` 依赖 `filter-out main.o` 的 `LIB_OBJS`，把 `unittest` 加进
-  `SUBDIRS` 会让 `main` 符号重复。
-- `$(BIN) $(TESTS): | $(FT_STAMP)` 的 `|` 是 order-only：stamp 更新不触发
-  重链接，只保证先后。
-- `override LDLIBS +=` 是为了命令行 `LDLIBS=-fsanitize=address` 之类覆盖
-  不丢 FreeType 库；没有 override，ASan 那次构建会漏链 freetype。
-- `wildcard` 在读入时展开：构建中途生成的 `.c`（判据 [3] 的 disp_dummy.c）
-  要下一次 make 才进 SRCS，判据正是先删 build 再 make 全程重跑。
+1. **命令行变量压过普通赋值**：`make LDFLAGS=-static` 不报错也不警告，
+   `LDFLAGS :=` 静默失效——所有必须活过命令行覆盖的旗标都得走
+   `override`，目前两个：FreeType 库（LDLIBS）与 pthread（LDFLAGS）。
+2. **unittest 与 items 都不进 SUBDIRS**：两个目录里都有 main，进了
+   就和 main.c 撞车；[4] 的重编计数也依赖这个排除（find 不算它们的
+   .c）。
+3. **`$(TESTS)` 依赖 `$(FT_STAMP)` 而 items 不依赖**：items 不碰
+   FreeType，ARM 上第一次构建时它们不需要等解包编译，`make test`
+   的关键路径因此短一截。
 
 ## 5. 消费者清单
 
-- 三个 check 脚本全部经由它构建（`make`/`make test`、`CFLAGS_EXTRA`、
-  `LDLIBS`、`CROSS`）。
-- 板上部署：`make CROSS=arm-linux-gnueabihf- LDFLAGS=-static`
-  （命令行变量覆盖空值 `LDFLAGS :=`，glibc 2.41 vs 板上 2.30 的结论见
-  TechReport 03/04）。
-- 新层接入只改 `SUBDIRS` 一行（`main.c` 的 `g_layers` 同步加一行）。
+| 消费者 | 用到的目标/变量 |
+|---|---|
+| 判据脚本（三个 check） | all/test/clean/distclean、CFLAGS_EXTRA、LDFLAGS_EXTRA、FT_TARBALL |
+| TechReports 07 | `override LDFLAGS += -pthread` 的裁定记录 |
+| TechReports 08 | SUBDIRS 加 config、items 链接规则 |

@@ -26,7 +26,7 @@ export FONT_DEV=builtin
 
 echo "[11] font 层: UTF-8 + provider + alpha + pitch + 四边裁剪"
 make test >/dev/null 2>&1
-ck "三套单层测试程序" "$(find build/x86/unittest -maxdepth 1 -type f -executable | wc -l)" "3"
+ck "单层测试与测试辅助程序" "$(find build/x86/unittest -maxdepth 1 -type f -executable | wc -l)" "7"
 
 probe_run() {
 	DISP_MEM=64x32x32x320 DISP_MEM_DUMP="$W/probe.raw" \
@@ -107,7 +107,7 @@ fi
 echo "[13] input 层: SYN 帧边界 + 相对/绝对坐标 + 按键"
 make test >/dev/null 2>&1
 INPUT_BACKEND=replay INPUT_REPLAY=unittest/input_replay.txt \
-	./build/x86/unittest/input_test >"$W/input.out" 2>&1
+	./build/x86/unittest/input_test --wait 1000 >"$W/input.out" 2>&1
 ck "replay provider 能被 manager 选择" \
    "$(sed -n 's/^source name=\([^ ]* [^ ]*\).*/\1/p' "$W/input.out")" "text replay"
 EXPECTED_INPUT="pointer x=42 y=21 dx=10 dy=5 buttons=1
@@ -124,7 +124,7 @@ echo "[13r1] 注错: 去掉负坐标钳制"
 sed -i '0,/if (value < 0)/s//if (value < -9999)/' input/input_manager.c
 make test >/dev/null 2>&1
 INPUT_BACKEND=replay INPUT_REPLAY=unittest/input_replay.txt \
-	./build/x86/unittest/input_test >"$W/input-bad.out" 2>&1
+	./build/x86/unittest/input_test --wait 1000 >"$W/input-bad.out" 2>&1
 red "大幅负位移后的坐标" \
     "$(grep 'dx=-1000' "$W/input-bad.out")" \
     "pointer x=0 y=0 dx=-1000 dy=-1000 buttons=1"
@@ -134,7 +134,7 @@ echo "[13r2] 注错: 不再等 SYN_REPORT 就提交事件"
 sed -i 's/raw->type != EV_SYN || raw->code != SYN_REPORT/raw->type == EV_SYN \&\& raw->code == SYN_REPORT/' input/input_manager.c
 make test >/dev/null 2>&1
 INPUT_BACKEND=replay INPUT_REPLAY=unittest/input_replay.txt \
-	./build/x86/unittest/input_test >"$W/input-nosync.out" 2>&1
+	./build/x86/unittest/input_test --wait 1000 >"$W/input-nosync.out" 2>&1
 red "应用事件个数" "$(grep -Ec '^(pointer|key) ' "$W/input-nosync.out")" "5"
 cp "$SRC/input/input_manager.c" input/input_manager.c
 
@@ -142,17 +142,127 @@ echo "[13r3] 注错: SYN_DROPPED 后仍解析失真记录"
 sed -i 's/if (g_dropping) {/if (g_dropping \&\& 0) {/' input/input_manager.c
 make test >/dev/null 2>&1
 INPUT_BACKEND=replay INPUT_REPLAY=unittest/input_replay.txt \
-	./build/x86/unittest/input_test >"$W/input-dropped.out" 2>&1
+	./build/x86/unittest/input_test --wait 1000 >"$W/input-dropped.out" 2>&1
 red "应用事件个数" "$(grep -Ec '^(pointer|key) ' "$W/input-dropped.out")" "5"
 cp "$SRC/input/input_manager.c" input/input_manager.c
 
 echo "[14] input 失败路径"
 INPUT_BACKEND=replay INPUT_REPLAY=unittest/input_replay_bad.txt \
-	./build/x86/unittest/input_test >"$W/input-malformed.out" 2>&1
+	./build/x86/unittest/input_test --wait 1000 >"$W/input-malformed.out" 2>&1
 ck "畸形回放被拒绝" "$?" "2"
 INPUT_BACKEND=evdev INPUT_DEV=/dev/null \
 	./build/x86/unittest/input_test --probe >"$W/input-not-evdev.out" 2>&1
 ck "普通文件不会冒充 evdev" "$?" "1"
+
+# ---------------------------------------------------------------------------
+# netinput: 同一条注册链表上的网络输入源。发送端吃的文本格式与 replay 的
+# fixture 完全相同, 所以这里复用 [13] 的 EXPECTED_INPUT 逐行对账:
+# 同一份事件序列, 走本地回放和走 TCP 必须产出同样的应用事件。
+# ---------------------------------------------------------------------------
+
+echo "[15] netinput: 网络输入源挂同一条注册链表"
+make test >/dev/null 2>&1
+ck "单层测试与测试辅助程序" \
+   "$(find build/x86/unittest -maxdepth 1 -type f -executable | wc -l)" "7"
+PORT=$((21000 + RANDOM % 20000))
+
+INPUT_BACKEND=netinput NETINPUT_PORT=$PORT \
+	./build/x86/unittest/input_test --wait 3000 --count 5 \
+	>"$W/net.out" 2>&1 &
+NI_SRV=$!
+sleep 1
+./build/x86/unittest/netinput_send 127.0.0.1 $PORT \
+	unittest/input_replay.txt >"$W/net-send.out" 2>&1
+wait $NI_SRV; NI_RC=$?
+ck "发送端发满 21 条原始记录" "$(cat "$W/net-send.out")" "sent 21 records"
+ck "网络路径产出 5 个应用事件" "$(grep -Ec '^(pointer|key) ' "$W/net.out")" "5"
+ck "网络路径与 replay 路径逐行相同" \
+   "$(grep -E '^(pointer|key) ' "$W/net.out")" "$EXPECTED_INPUT"
+ck "netinput 服务端退出码" "$NI_RC" "0"
+
+t0=$(date +%s)
+INPUT_BACKEND=netinput NETINPUT_PORT=$((PORT + 1)) \
+	./build/x86/unittest/input_test --once >"$W/net-none.out" 2>&1
+NI_NONE_RC=$?
+t1=$(date +%s)
+ck "无客户端连接时干净超时退出" "$NI_NONE_RC" "0"
+ck "无客户端时等满整个超时窗口" "$((t1 - t0 >= 4))" "1"
+
+echo "[15r] 注错: 客户端断开被当成致命错误, 服务跟着死掉"
+INPUT_BACKEND=netinput NETINPUT_PORT=$((PORT + 2)) \
+	./build/x86/unittest/input_test --wait 8000 --count 5 \
+	>"$W/net-partial.out" 2>&1 &
+NI_SRV=$!
+sleep 1
+./build/x86/unittest/netinput_send 127.0.0.1 $((PORT + 2)) \
+	unittest/input_replay.txt --partial >"$W/net-partial-send.out" 2>&1
+./build/x86/unittest/netinput_send 127.0.0.1 $((PORT + 2)) \
+	unittest/input_replay.txt >"$W/net-after-send.out" 2>&1
+wait $NI_SRV
+ck "半条记录后断开不杀伤服务" \
+   "$(grep -Ec '^(pointer|key) ' "$W/net-partial.out")" "5"
+ck "坏客户端走后好客户端照常送达" "$(cat "$W/net-after-send.out")" "sent 21 records"
+
+sed -i '/客户端没了只影响这一条连接/{n;s/return ERR_BUSY/return ERR_NOTFOUND/}' \
+	input/netinput.c
+make test >/dev/null 2>&1
+INPUT_BACKEND=netinput NETINPUT_PORT=$((PORT + 2)) \
+	./build/x86/unittest/input_test --wait 8000 --count 5 \
+	>"$W/net-partial-bad.out" 2>&1 &
+NI_SRV=$!
+sleep 1
+./build/x86/unittest/netinput_send 127.0.0.1 $((PORT + 2)) \
+	unittest/input_replay.txt --partial >/dev/null 2>&1
+sleep 0.5
+./build/x86/unittest/netinput_send 127.0.0.1 $((PORT + 2)) \
+	unittest/input_replay.txt >"$W/net-after-bad.out" 2>&1
+wait $NI_SRV
+red "半条记录后断开不杀伤服务" \
+    "$(grep -Ec '^(pointer|key) ' "$W/net-partial-bad.out")" "5"
+cp "$SRC/input/netinput.c" input/netinput.c
+
+# ---------------------------------------------------------------------------
+# 多线程: provider 的 poll 与解析搬进专职读取线程, 消费者只面对环形队列。
+# 丢帧策略 = 丢最旧, 收发丢三本账必须闭合。
+# ---------------------------------------------------------------------------
+
+echo "[16] 多线程: 读取线程 + 环形队列, 丢帧有账"
+make test >/dev/null 2>&1
+awk 'BEGIN { for (i = 0; i < 400; i++) { print 1, 0, 2, 0, 1; print 1, 0, 0, 0, 0 } }' \
+	> "$W/stress_replay.txt"
+INPUT_BACKEND=replay INPUT_REPLAY="$W/stress_replay.txt" \
+	./build/x86/unittest/input_test --wait 1000 --slow 5000 \
+	>"$W/stress.out" 2>&1
+STRESS_RC=$?
+STRESS_LINE=$(grep '^stats ' "$W/stress.out")
+S_RECV=$(printf '%s\n' "$STRESS_LINE" | sed -n 's/.*received=\([0-9]*\).*/\1/p')
+S_DELIV=$(printf '%s\n' "$STRESS_LINE" | sed -n 's/.*delivered=\([0-9]*\).*/\1/p')
+S_DROP=$(printf '%s\n' "$STRESS_LINE" | sed -n 's/.*dropped=\([0-9]*\).*/\1/p')
+ck "压力跑退出码" "$STRESS_RC" "0"
+ck "采集 400 帧" "$S_RECV" "400"
+ck "送达数与 pointer 行数一致(统计不虚报)" "$S_DELIV" "$(grep -c '^pointer ' "$W/stress.out")"
+ck "三本账闭合 received=delivered+dropped" "$((S_RECV - S_DELIV - S_DROP))" "0"
+ck "慢消费者确实挤掉了旧帧" "$([ "$S_DROP" -gt 0 ] && echo yes || echo no)" "yes"
+
+echo "[17] tsan: 线程与队列无数据竞争"
+make distclean >/dev/null 2>&1
+if make test CFLAGS_EXTRA=-fsanitize=thread LDFLAGS_EXTRA=-fsanitize=thread >/dev/null 2>&1; then
+	INPUT_BACKEND=replay INPUT_REPLAY="$W/stress_replay.txt" \
+		timeout 60 ./build/x86/unittest/input_test --wait 1000 --slow 2000 \
+		>"$W/tsan.out" 2>&1
+	ck "tsan 无竞争报告" "$(grep -c 'WARNING: ThreadSanitizer' "$W/tsan.out")" "0"
+
+	echo "[17r] 注错: 拆掉队列的互斥锁"
+	sed -i 's/pthread_mutex_lock(&g_lock);/(void)0;/' input/input_manager.c
+	make test CFLAGS_EXTRA=-fsanitize=thread LDFLAGS_EXTRA=-fsanitize=thread >/dev/null 2>&1
+	INPUT_BACKEND=replay INPUT_REPLAY="$W/stress_replay.txt" \
+		timeout 60 ./build/x86/unittest/input_test --wait 1000 --slow 2000 \
+		>"$W/tsan-bad.out" 2>&1
+	red "tsan 无竞争报告" "$(grep -c 'WARNING: ThreadSanitizer' "$W/tsan-bad.out")" "0"
+else
+	skip "tsan 判据" "线程净化器在本机编译失败"
+fi
+make distclean >/dev/null 2>&1
 
 echo
 echo "PASS=$PASS  FAIL=$FAIL  SKIP=$SKIP"

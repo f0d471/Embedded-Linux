@@ -39,11 +39,19 @@ struct input_source_info {
 	int abs_y_max;
 };
 
+/* 队列对账: received = delivered + dropped 恒成立(同一次 init/exit 内)。 */
+struct input_stats {
+	int received;
+	int delivered;
+	int dropped;
+};
+
 int  input_init(void);
 void input_exit(void);
 
 /* timeout_ms: -1 永久等待，0 只检查现有数据，正数为最长等待毫秒数。 */
 int input_get_event(struct input_event_data *out, int timeout_ms);
 const struct input_source_info *input_get_source_info(void);
+int  input_get_stats(struct input_stats *out);
 
 #endif /* __INPUT_MANAGER_H */

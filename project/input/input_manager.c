@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <linux/input.h>
 #include <poll.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -10,6 +11,23 @@
 #include "display/disp_manager.h"
 #include "input/input_internal.h"
 #include "input/input_manager.h"
+
+/*
+ * 读取线程 + 环形队列。
+ *
+ * provider 的 fd 由专职线程 poll 和解析, 产出应用事件后推进队列;
+ * 消费者(input_get_event)只跟队列打交道。这样做的代价是多一把锁和一个
+ * 线程生命周期要管理, 换来的是: 消费者慢的时候采集不丢采样时机,
+ * 丢的是队列里最旧的事件, 而且丢了几个、送达了几个都有账可查。
+ *
+ * 队列满的策略是丢最旧: 输入事件的价值随时间衰减, 最新的指针位置
+ * 比一秒前的按键更值得保留。丢弃量记在 g_dropped, 判据对账用。
+ */
+
+#define INPUT_QUEUE_DEPTH 32
+
+/* 队列第 i 个槽位对应的物理下标 */
+#define SLOT(i) ((i) % INPUT_QUEUE_DEPTH)
 
 static struct input_provider *g_list;
 static struct input_provider *g_cur;
@@ -31,6 +49,21 @@ static int g_pointer_changed;
 static int g_key_code = -1;
 static int g_key_value;
 static int g_dropping;
+
+/* 队列与线程。g_lock 保护下面整块, 以及 cond 的谓词。 */
+static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_not_empty;          /* 时钟绑定见 input_init */
+static pthread_t g_thread;
+static struct input_event_data g_queue[INPUT_QUEUE_DEPTH];
+static int g_head;                          /* 下一个写入槽 */
+static int g_tail;                          /* 下一个读取槽 */
+static int g_count;                         /* 队列里的可用事件数 */
+static int g_quit;                          /* input_exit 请求线程退出 */
+static int g_closed;                        /* provider 已到 EOF, 不会再有数据 */
+static int g_error;                         /* provider 的致命错误, 消费时要穿透 */
+static int g_received;
+static int g_delivered;
+static int g_dropped;
 
 void input_register(struct input_provider *provider)
 {
@@ -193,8 +226,81 @@ static int64_t monotonic_ms(void)
 	return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+/* 推送一个应用事件。队列满时丢最旧的一个, 账记在 g_dropped。 */
+static void queue_push(const struct input_event_data *ev)
+{
+	pthread_mutex_lock(&g_lock);
+	if (g_count == INPUT_QUEUE_DEPTH) {
+		g_tail = SLOT(g_tail + 1);
+		g_count--;
+		g_dropped++;
+	}
+	g_queue[SLOT(g_head)] = *ev;
+	g_head = SLOT(g_head + 1);
+	g_count++;
+	g_received++;
+	pthread_cond_signal(&g_not_empty);
+	pthread_mutex_unlock(&g_lock);
+}
+
+/* 读取线程: poll provider 的 fd, 解析原始记录, 把应用事件推进队列。
+ * provider 到 EOF 或出错时记下原因并通知消费者, 然后线程收场。 */
+static void *input_reader(void *arg)
+{
+	struct input_raw_event raw;
+	struct input_event_data ev;
+	struct pollfd pfds[8];
+	int fds[8];
+	int nfds, ret;
+
+	(void)arg;
+	while (!g_quit) {
+		nfds = g_cur->get_fds(fds, 8);
+		if (nfds < 1) {
+			g_error = ERR_IO;
+			break;
+		}
+		for (ret = 0; ret < nfds; ret++) {
+			pfds[ret].fd = fds[ret];
+			pfds[ret].events = POLLIN;
+			pfds[ret].revents = 0;
+		}
+		/* 200ms 醒一次看 g_quit: 退出请求最多等一个 poll 周期 */
+		ret = poll(pfds, nfds, 200);
+		if (g_quit)
+			break;
+		if (ret == 0)
+			continue;
+		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
+			g_error = ERR_IO;
+			break;
+		}
+
+		ret = g_cur->read_raw(&raw);
+		if (ret == ERR_BUSY)
+			continue;
+		if (ret == ERR_NOTFOUND)
+			break;              /* replay 读到文件尾, 正常收场 */
+		if (ret != ERR_OK) {
+			g_error = ret;
+			break;
+		}
+		if (parse_raw(&raw, &ev))
+			queue_push(&ev);
+	}
+
+	pthread_mutex_lock(&g_lock);
+	g_closed = 1;
+	pthread_cond_broadcast(&g_not_empty);
+	pthread_mutex_unlock(&g_lock);
+	return NULL;
+}
+
 int input_init(void)
 {
+	pthread_condattr_t attr;
 	const struct disp_buf *display;
 	const char *name;
 	int ret;
@@ -204,6 +310,7 @@ int input_init(void)
 	g_list = NULL;
 	evdev_register();
 	replay_register();
+	netinput_register();
 
 	name = getenv("INPUT_BACKEND");
 	if (name == NULL)
@@ -227,6 +334,31 @@ int input_init(void)
 	g_buttons = 0;
 	g_dropping = 0;
 	reset_frame();
+
+	g_head = 0;
+	g_tail = 0;
+	g_count = 0;
+	g_quit = 0;
+	g_closed = 0;
+	g_error = 0;
+	g_received = 0;
+	g_delivered = 0;
+	g_dropped = 0;
+
+	/* 超时判据用 CLOCK_MONOTONIC 的毫秒数算期限, cond 也要绑到同一个
+	 * 时钟上, pthread_cond_timedwait 的绝对期限才不会两套时间对不上。 */
+	pthread_condattr_init(&attr);
+	pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
+	pthread_cond_init(&g_not_empty, &attr);
+	pthread_condattr_destroy(&attr);
+
+	ret = pthread_create(&g_thread, NULL, input_reader, NULL);
+	if (ret != 0) {
+		g_cur->close();
+		g_cur = NULL;
+		return ERR_NOMEM;
+	}
+
 	g_inited = 1;
 	LOG_INFO("input init OK");
 	return ERR_OK;
@@ -236,10 +368,25 @@ void input_exit(void)
 {
 	if (!g_inited)
 		return;
+	pthread_mutex_lock(&g_lock);
+	g_quit = 1;
+	pthread_cond_broadcast(&g_not_empty);
+	pthread_mutex_unlock(&g_lock);
+	pthread_join(g_thread, NULL);
+
 	g_cur->close();
 	g_cur = NULL;
 	g_list = NULL;
 	g_inited = 0;
+	g_quit = 0;
+	g_closed = 0;
+	g_error = 0;
+	g_count = 0;
+	g_head = 0;
+	g_tail = 0;
+	g_received = 0;
+	g_delivered = 0;
+	g_dropped = 0;
 	g_dropping = 0;
 	reset_frame();
 	LOG_INFO("input exit OK");
@@ -250,45 +397,64 @@ const struct input_source_info *input_get_source_info(void)
 	return g_inited ? &g_info : NULL;
 }
 
+int input_get_stats(struct input_stats *out)
+{
+	if (out == NULL)
+		return ERR_PARAM;
+	pthread_mutex_lock(&g_lock);
+	out->received = g_received;
+	out->delivered = g_delivered;
+	out->dropped = g_dropped;
+	pthread_mutex_unlock(&g_lock);
+	return ERR_OK;
+}
+
 int input_get_event(struct input_event_data *out, int timeout_ms)
 {
-	struct input_raw_event raw;
-	struct pollfd pfd;
 	int64_t deadline = 0;
-	int wait_ms, ret;
+	int64_t remain;
+	struct timespec until;
+	int ret = ERR_OK;
 
 	if (!g_inited || out == NULL || timeout_ms < -1)
 		return ERR_PARAM;
 	if (timeout_ms >= 0)
 		deadline = monotonic_ms() + timeout_ms;
 
+	pthread_mutex_lock(&g_lock);
 	for (;;) {
+		if (g_count > 0) {
+			*out = g_queue[SLOT(g_tail)];
+			g_tail = SLOT(g_tail + 1);
+			g_count--;
+			g_delivered++;
+			break;
+		}
+		if (g_error != 0) {
+			ret = g_error;
+			break;
+		}
+		if (g_closed) {
+			ret = ERR_NOTFOUND;
+			break;
+		}
+		if (timeout_ms == 0) {
+			ret = ERR_BUSY;
+			break;
+		}
 		if (timeout_ms < 0) {
-			wait_ms = -1;
-		} else {
-			int64_t remain = deadline - monotonic_ms();
-			if (remain < 0)
-				remain = 0;
-			wait_ms = remain > INT_MAX ? INT_MAX : (int)remain;
-		}
-		pfd.fd = g_cur->get_fd();
-		pfd.events = POLLIN;
-		pfd.revents = 0;
-		ret = poll(&pfd, 1, wait_ms);
-		if (ret == 0)
-			return ERR_BUSY;
-		if (ret < 0) {
-			if (errno == EINTR)
-				continue;
-			return ERR_IO;
-		}
-
-		ret = g_cur->read_raw(&raw);
-		if (ret == ERR_BUSY)
+			pthread_cond_wait(&g_not_empty, &g_lock);
 			continue;
-		if (ret != ERR_OK)
-			return ret;
-		if (parse_raw(&raw, out))
-			return ERR_OK;
+		}
+		remain = deadline - monotonic_ms();
+		if (remain <= 0) {
+			ret = ERR_BUSY;
+			break;
+		}
+		until.tv_sec = (time_t)(deadline / 1000);
+		until.tv_nsec = (long)(deadline % 1000) * 1000000L;
+		pthread_cond_timedwait(&g_not_empty, &g_lock, &until);
 	}
+	pthread_mutex_unlock(&g_lock);
+	return ret;
 }

@@ -23,6 +23,7 @@ run_suite() {
 
 run_suite check_core.sh "$W/core.out"; CORE_RC=$?
 run_suite check_font_input.sh "$W/font_input.out"; EXTRA_RC=$?
+run_suite check_gui.sh "$W/gui.out"; GUI_RC=$?
 
 read_result() {
 	sed -n 's/^PASS=\([0-9][0-9]*\)  FAIL=\([0-9][0-9]*\)  SKIP=\([0-9][0-9]*\)$/\1 \2 \3/p' "$1" | tail -1
@@ -30,7 +31,9 @@ read_result() {
 
 read -r P1 F1 S1 <<<"$(read_result "$W/core.out")"
 read -r P2 F2 S2 <<<"$(read_result "$W/font_input.out")"
+read -r P3 F3 S3 <<<"$(read_result "$W/gui.out")"
 
 echo
-echo "TOTAL PASS=$((P1 + P2))  FAIL=$((F1 + F2))  SKIP=$((S1 + S2))"
-[ "$CORE_RC" -eq 0 ] && [ "$EXTRA_RC" -eq 0 ] && [ "$((F1 + F2))" -eq 0 ]
+echo "TOTAL PASS=$((P1 + P2 + P3))  FAIL=$((F1 + F2 + F3))  SKIP=$((S1 + S2 + S3))"
+{ [ "$CORE_RC" -eq 0 ] && [ "$EXTRA_RC" -eq 0 ] && [ "$GUI_RC" -eq 0 ]; } && \
+	[ "$((F1 + F2 + F3))" -eq 0 ]

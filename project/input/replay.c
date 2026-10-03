@@ -37,9 +37,12 @@ static void replay_close(void)
 	}
 }
 
-static int replay_get_fd(void)
+static int replay_get_fds(int *fds, int max)
 {
-	return g_file == NULL ? -1 : fileno(g_file);
+	if (max < 1)
+		return ERR_PARAM;
+	fds[0] = g_file == NULL ? -1 : fileno(g_file);
+	return 1;
 }
 
 static int replay_read_raw(struct input_raw_event *out)
@@ -71,7 +74,7 @@ static struct input_provider g_replay = {
 	.name = "replay",
 	.open = replay_open,
 	.close = replay_close,
-	.get_fd = replay_get_fd,
+	.get_fds = replay_get_fds,
 	.read_raw = replay_read_raw,
 };
 
