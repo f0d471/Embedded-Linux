@@ -1,5 +1,5 @@
 /*
- * display 层管理器。对上提供画布信息和画点/填矩形, 对下按名字选一个后端。
+ * display 层管理器。对上提供画布信息和画点/混色/填矩形, 对下按名字选一个后端。
  *
  * 后端选择来自环境变量 DISP_DEV, 缺省 fb。缺省不做"fb 打不开就退回 mem"的回退,
  * 否则板上出问题时程序会静默画进一块没人看的内存。
@@ -92,6 +92,15 @@ static unsigned int pack_field(unsigned int c8, const struct disp_field *f)
 	return (c8 >> (8 - f->length)) << f->offset;
 }
 
+/* 把 framebuffer 位段展开回 0..255，供 alpha 混色读取背景。 */
+static unsigned int unpack_field(unsigned int pixel, const struct disp_field *f)
+{
+	unsigned int mask = (1u << f->length) - 1;
+	unsigned int value = (pixel >> f->offset) & mask;
+
+	return (value * 255u + mask / 2) / mask;
+}
+
 int disp_put_pixel(int x, int y, unsigned int rgb)
 {
 	unsigned char *p;
@@ -119,6 +128,41 @@ int disp_put_pixel(int x, int y, unsigned int rgb)
 		return ERR_NOTSUP;
 	}
 	return ERR_OK;
+}
+
+int disp_blend_pixel(int x, int y, unsigned int rgb, unsigned char alpha)
+{
+	unsigned char *p;
+	unsigned int old, br, bg, bb, fr, fg, fb, mixed;
+
+	if (g_cur == NULL)
+		return ERR_PARAM;
+	if (x < 0 || y < 0 || x >= g_buf.xres || y >= g_buf.yres)
+		return ERR_PARAM;
+	if (alpha == 0)
+		return ERR_OK;
+	if (alpha == 255)
+		return disp_put_pixel(x, y, rgb);
+
+	p = g_buf.base + y * g_buf.line_length + x * (g_buf.bpp / 8);
+	if (g_buf.bpp == 16)
+		old = *(unsigned short *)p;
+	else if (g_buf.bpp == 32)
+		old = *(unsigned int *)p;
+	else
+		return ERR_NOTSUP;
+
+	br = unpack_field(old, &g_buf.red);
+	bg = unpack_field(old, &g_buf.green);
+	bb = unpack_field(old, &g_buf.blue);
+	fr = (rgb >> 16) & 0xff;
+	fg = (rgb >> 8) & 0xff;
+	fb = rgb & 0xff;
+	fr = (fr * alpha + br * (255 - alpha) + 127) / 255;
+	fg = (fg * alpha + bg * (255 - alpha) + 127) / 255;
+	fb = (fb * alpha + bb * (255 - alpha) + 127) / 255;
+	mixed = (fr << 16) | (fg << 8) | fb;
+	return disp_put_pixel(x, y, mixed);
 }
 
 /*

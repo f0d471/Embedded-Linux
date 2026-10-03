@@ -1,57 +1,27 @@
 # common 逐行精读
 
-对应代码：`project/include/common.h`（50 行）与 `project/common.c`（51 行）。
-
-前置：C 预处理器的执行时机，见 [`notes/01_应用编程/01_工具链与构建系统.md`](../../../01_应用编程/01_工具链与构建系统.md)
-第 3 节（GCC 的四个步骤，预处理这一步）；
-文件描述符与 dup2，见 [`notes/00_基础/06_文件描述符与VFS.md`](../../../00_基础/06_文件描述符与VFS.md)。
-
----
+对应代码：`project/include/common.h`（50 行）、`project/common.c`（51 行）。
 
 ## 1. 文件定位
 
-`include/common.h` 是全项目唯一的公共头文件，六层和 `main.c` 全都包含它。
-它不定义任何业务数据结构，只定义四样东西：
-错误码、日志宏、一个数组长度宏，
-以及一个把 stderr 接到文件去的函数声明。
+错误码、日志宏与日志重定向，全项目唯一没有层归属的公共件。所有 `.c` 都包含
+`common.h`；`log_redirect()` 由 `main.c` 在任何层启动之前调用一次。
+判据在 `check_core.sh` 的 [5]（日志开关）与 [6]（落文件、O_APPEND、errno 带出）。
 
-它的存在理由是"不允许各层自己发明错误码和日志格式"。
-没有这个文件的话，显示层会返回 `-1`，输入层会返回 `-EIO`，字体层会返回 `0` 表示失败，
-到项目整合的时候没有一个上层能统一判断。
+前置知识：[从零开始读写 project 代码](../00-从零开始读写项目代码.md)第 6/8 节
+（位运算、错误码与资源回滚）；第 02 章笔记的文件 IO 部分。
 
-`common.c` 有两个函数：`err_str` 把错误码翻译成字符串，`log_redirect` 把 stderr
-整条接到一个文件上。前者单独成文件而不是写成头文件里的 `static inline`，
-是因为它是一张会长大的表，放在头文件里会被每个 `.c` 各展开一份。
+## 2. include/common.h
 
----
-
-## 2. 包含保护与唯一的系统头（第 1 到 4 行）
+### 第 1—15 行：guard 与错误码
 
 ```c
 #ifndef __COMMON_H
 #define __COMMON_H
 
 #include <stdio.h>
-```
 
-包含保护用的是双下划线前缀加文件名。同一个 `.c` 可能通过两条路径包含到它
-（自己直接包含一次，再经某层的头文件间接包含一次），没有这层保护就是重复定义。
-
-`#include <stdio.h>` 放在这里不是为了方便，是**日志宏用到了 `fprintf` 和 `stderr`**。
-宏在展开处才被编译，如果这个头文件不带上 `stdio.h`，
-那么每个用到 `LOG_INFO` 的 `.c` 都得自己先包含 `stdio.h`，
-少一个就报"隐式声明 fprintf"。宏自带依赖，这是宏和函数的一个实际差别。
-
-尖括号而不是双引号：`stdio.h` 要从工具链的系统目录里找，
-交叉编译时会自动落到 ARM 那一份上。用双引号会先在当前目录找，
-在这里没有意义。
-
----
-
-## 3. 错误码（第 6 到 17 行）
-
-```c
-//统一错误码。约定: 0 表示成功, 负数表示失败, 任何层的 init 都不许返回正数。
+//统一错误码。约定: 0 表示成功, 负数表示失败, 任何层的 init 都不许返回正数
 enum {
 	ERR_OK       =  0,   /* 成功 */
 	ERR_PARAM    = -1,   /* 参数非法 */
@@ -61,159 +31,78 @@ enum {
 	ERR_NOTFOUND = -5,   /* 找不到指定对象 */
 	ERR_BUSY     = -6,   /* 资源被占用 */
 };
-
-const char *err_str(int err);
 ```
 
-用匿名 `enum` 而不是一串 `#define`。区别在调试器里：
-`enum` 的名字进符号表，`gdb` 里 `p ret` 能显示名字；`#define` 在预处理阶段就没了，
-调试器只能给你看 `-3`。
-代价是 `enum` 的成员是 `int` 类型，不能像 `#define` 那样用在 `#if` 里，这里用不到。
+错误码用匿名 `enum` 而非 `#define`：枚举常量进编译器的符号表，调试器能按名字显示，
+`#define` 做不到。约定"负数失败"写在本文件顶部，各层返回它自己的错误码时
+不需要再传额外信息——调用方只判断"是不是 `ERR_OK`"，人读日志时才看具体码。
+`ERR_BUSY` 在 input 层有专用语义（超时、无数据），与"资源被占用"的字面义偏离，
+该层在自己的头文件注释里说明了这个复用。
 
-**负数不是随手挑的，是为了让"成功"这个判断只有一种写法。**
-约定里那句"任何层的 init 都不许返回正数"是给上层用的：
-上层可以写 `if (ret != ERR_OK)`，也可以写 `if (ret < 0)`，两种写法等价。
-如果允许正数表示"成功但有情况"，这两种写法就会分叉，
-而分叉的地方在以后加新层时最容易写错。
-
-此处假设各层不会自己 `return -1` 而绕过这张表，由**代码评审**保证；
-若不成立，`err_str()` 会返回 `"invalid parameter"`，
-把一个 IO 错误报成参数错误，比不报还坏。这是一处目前没有守门人的地方。
-
----
-## 4. log_redirect 的声明（第 19 到 20 行）
+### 第 17—20 行：两个函数声明
 
 ```c
+const char *err_str(int err);
+
 // 日志重定向，os_errno 不能为空；成功时为 0，系统调用失败时为 errno
 int log_redirect(const char *path, int *os_errno);
 ```
 
-它放在错误码之后、日志宏之前，是因为它的返回值是错误码，而它服务的对象是日志宏。
+`os_errno` 是输出参数，注释写明"不能为空"：调用方必须传地址，函数内不替调用方
+容忍 `NULL`（见 `common.c` 第 28 行）。项目协议（错误码）与操作系统事实（errno）
+分两个通道返回，`main.c` 打日志时两个都打。
 
-按普通话读一遍：调用者给它一个文件路径和一个保存系统错误码的位置；如果函数成功，
-原来显示在终端里的项目日志从此写进这个文件，`*os_errno` 是 0；如果系统调用失败，
-函数返回项目统一的 `ERR_IO`，具体原因另放进 `*os_errno`。函数名里的 redirect
-就是“改去处”。
-
-这里有意保留两层错误：`ERR_IO` 回答“项目哪类操作失败”，`errno` 回答“系统为什么
-失败”。调用方可以统一按 `ERR_*` 分支，同时用 `strerror(*os_errno)` 打出
-`No such file or directory` 这类现场信息。
-
-项目日志走 `stderr`。这个名字叫“标准错误输出”，默认通常连接终端。
-C 标准规定 `stderr` 不带缓冲：每条 `fprintf` 当场变成一次 `write`。
-`stdout` 接到文件时是全缓冲，攒够 4096 字节才下去一次，
-程序被信号打死或板子掉电时，压在缓冲区里的那几 KB 直接消失。
-一个跑在板子上、随时可能被复位的程序不能接受这一点。
-
-代价是每条日志一次系统调用。这个骨架一次运行只有 13 条日志，代价可以忽略；
-以后 business 层如果开始高频打日志，要重新算这笔账。
-
-接口只有一个函数、没有配对的 `log_close()`，是有意的：
-`stderr` 在进程退出时由内核统一关，中途也没有"换回终端"的需求。
-真需要换回去，得在重定向之前先 `dup` 一份原来的 2 号存起来 ——
-现在没有这个需求，就不提前写。
-
-
-## 5. 日志级别开关（第 22 到 25 行）
+### 第 22—48 行：日志宏
 
 ```c
+//日志级别开关
 #ifndef LOG_LEVEL
 #define LOG_LEVEL 2
 #endif
-```
 
-`#ifndef` 包住 `#define`，效果是"命令行没给就用默认值"。
-命令行怎么给见 `Makefile` 精读的 `CFLAGS_EXTRA`：
-
-```
-    make CFLAGS_EXTRA=-DLOG_LEVEL=0
-```
-
-`-DLOG_LEVEL=0` 相当于在每个 `.c` 的第一行插一句 `#define LOG_LEVEL 0`，
-所以这里的 `#ifndef` 不成立，默认值不生效。
-
-**级别在编译期决定，不在运行期。** 关掉的级别整条语句被预处理器删干净，
-产物里连字符串常量都不剩。运行期开关（一个全局变量加一个 `if`）做不到这一点：
-字符串还在，`if` 还在，只是不打印。嵌入式上这两件事都要钱：
-字符串占 flash，`if` 占指令周期。
-
----
-
-## 6. 日志宏（第 27 到 46 行）
-
-```c
 #define LOG_RAW(tag, fmt, ...) \
-	fprintf(stderr, "[%s] %s:%d " fmt "\n", tag, __FILE__, __LINE__, ##__VA_ARGS__)
-```
+	fprintf(stderr, "[%s] %s:%d " fmt "\n", tag, __FILE__, __LINE__, ##__VA_ARGS__) //__VA_ARGS__ 是 GNU 扩展, 作用是零个可变参数时吞掉前面那个逗号
 
-这一行里有四个记号值得单独看。
-
-**`fmt` 不带引号地拼在字符串中间。** `"[%s] %s:%d " fmt "\n"` 利用的是 C 的
-相邻字符串字面量自动拼接：调用方传 `"%s init OK"`，展开后得到
-`"[%s] %s:%d %s init OK\n"`，是一个完整的字面量。
-这要求 `fmt` **必须是字面量**，传一个 `char *` 变量进来会编译不过。
-这是有意的：`printf(变量)` 是格式化字符串漏洞的经典形状，这里从语法上堵死。
-
-**`__FILE__` 和 `__LINE__` 在展开处取值。** 它们由预处理器替换成宏被展开的那个
-文件名和行号，不是本文件的。所以日志里显示的是 `display/disp_manager.c:14`，
-指向真正打日志的那一行。
-
-**`##__VA_ARGS__` 是 GNU 扩展。** 作用是零个可变参数时吞掉前面那个逗号。
-写 `LOG_INFO("hello")` 时，标准写法 `__VA_ARGS__` 展开成
-`..., __LINE__, )`，多一个逗号，编译报错；`##` 版本会把它吃掉。
-代价是这一行不是标准 C，换成 clang 也能用，换成 MSVC 不行。
-本仓只用 gcc，接受这个代价。
-
-**输出到 `stderr` 而不是 `stdout`。** 两个理由：`stderr` 是无缓冲的，
-程序崩溃时已经打出来的日志不会跟着缓冲区一起丢；
-以及日志和程序的正常输出分开，`./product_tool > result.txt` 时日志仍然在屏幕上。
-这一条在第 5 组判据里被用到：`LOG_LEVEL=0` 时量的是
-`./build/x86/product_tool 2>&1 | wc -l`，`2>&1` 就是为了把 `stderr` 收进来。
-
-三组开关的形状一样，以 `LOG_ERR` 为例：
-
-```c
-#if LOG_LEVEL >= 1
+#if LOG_LEVEL >= 1  // 错误级别
 #define LOG_ERR(fmt, ...)   LOG_RAW("E", fmt, ##__VA_ARGS__)
 #else
 #define LOG_ERR(fmt, ...)   do {} while (0)
 #endif
-```
 
-关掉时定义成 `do {} while (0)` 而不是定义成空。空定义会让
+#if LOG_LEVEL >= 2  // 信息级别
+#define LOG_INFO(fmt, ...)  LOG_RAW("I", fmt, ##__VA_ARGS__)
+#else
+#define LOG_INFO(fmt, ...)  do {} while (0)
+#endif
 
-```c
-    if (x)
-        LOG_ERR("bad");
-    else
-        foo();
-```
+#if LOG_LEVEL >= 3  // 调试级别
+#define LOG_DBG(fmt, ...)   LOG_RAW("D", fmt, ##__VA_ARGS__)
+#else
+#define LOG_DBG(fmt, ...)   do {} while (0)
+#endif
 
-在关掉日志之后变成 `if (x) ; else foo();`——这一句碰巧还能编过。
-换成 `if (x) LOG_ERR("bad"); else foo();` 里的展开更糟：
-有些形状会让 `else` 找不到配对的 `if`。`do {} while (0)` 是一条完整语句，
-后面可以跟分号，放在任何位置都和一条普通语句等价。
-
----
-
-## 7. ARRAY_SIZE（第 48 行）
-
-```c
 #define ARRAY_SIZE(a)  ((int)(sizeof(a) / sizeof((a)[0])))
 ```
 
-数组总字节数除以单个元素字节数。外面套 `(int)` 是因为 `sizeof` 的结果是
-`size_t`（无符号），拿去和 `int` 类型的循环变量比较会触发
-"有符号与无符号比较"的警告，而本仓的 `CFLAGS` 里有 `-Wall -Wextra`。
+`##__VA_ARGS__` 解决的是 `LOG_INFO("framework is up")` 这类无参数调用：标准 C 的
+变参宏至少要求一个实参占住 `...`，`##` 让前置逗号在变参为空时消失。这是 GNU 扩展，
+gcc/clang 都支持，MSVC 不支持——本项目只在 gcc 系工具链上构建。
 
-此处假设传进来的是**真数组**，由调用点保证；若传进来的是指针，
-`sizeof(a)` 变成指针宽度（本机 8，ARM 上 4），结果是一个毫无意义的小数字，
-而且不报错。`main.c` 里唯一的调用点 `ARRAY_SIZE(g_layers)` 传的是文件作用域的数组，
-前提成立。
+`do {} while (0)` 让关闭的日志在 `if (x) LOG_INFO(...); else ...` 里仍是单条语句，
+宏展开后不吞掉调用者的 `else`。日志在预处理期被替换成空语句，`-DLOG_LEVEL=0`
+构建的产物里连格式字符串都不存在（判据 [5] 数到终端输出 0 行），这是编译期裁剪，
+发生在编译前而不是运行时。
 
----
+`LOG_RAW` 固定输出到 `stderr`：stderr 无缓冲，每条日志一次 `write(2)`，13 条日志
+正好 13 次 write（判据 [6] 用 strace 数过），`stdout` 有缓冲没有这个性质。
+`%s:%d` 打 `__FILE__`/`__LINE__`，定位调用点不用查。
 
-## 8. common.c：系统头与错误码翻译表（第 1 到 20 行）
+`ARRAY_SIZE` 只用于真正的数组（`main.c` 的 `g_layers`）；数组退化为指针后
+`sizeof` 得到指针大小，除法结果是错的，所以它不能用在函数参数上。
+
+## 3. common.c
+
+### 第 1—20 行：错误码翻译
 
 ```c
 #include <errno.h>
@@ -222,117 +111,47 @@ C 标准规定 `stderr` 不带缓冲：每条 `fprintf` 当场变成一次 `writ
 
 #include "common.h"
 
+// 错误码翻译表
 const char *err_str(int err)
 {
 	switch (err) {
 	case ERR_OK:       return "ok";
-	...
+	case ERR_PARAM:    return "invalid parameter";
+	case ERR_NOMEM:    return "out of memory";
+	case ERR_IO:       return "device io failed";
+	case ERR_NOTSUP:   return "not supported";
+	case ERR_NOTFOUND: return "not found";
+	case ERR_BUSY:     return "busy";
 	default:           return "unknown error";
 	}
 }
 ```
 
-返回 `const char *` 指向字符串字面量，字面量在 `.rodata` 段里，
-生命周期是整个程序，所以返回它的指针是安全的，调用方不需要释放。
+`default` 分支兜住未定义的错误码，返回值永远可用作 `%s` 参数。函数只做映射，
+不做判断；判空之类的策略留在调用方。
 
-`switch` 而不是数组下标。错误码是负数，用数组要先取反再当下标，
-多一次心算，而且新增一个不连续的错误码时会静默错位。
-`switch` 加 `default` 在任何输入下都有确定的返回值。
-
-`default` 这一支不能省。`err_str(-99)` 必须返回点什么，
-函数不能走到结尾而没有 `return`——那是未定义行为，
-`-Wall` 会报 "control reaches end of non-void function"。
-
-三个系统头各自对应 `log_redirect` 的一组依赖：`errno.h` 提供 `errno`，
-`fcntl.h` 提供 `open` 与 `O_*` 标志，`unistd.h` 提供 `dup2` 和 `close`。
-
----
-
-## 9. common.c：log_redirect（第 22 到 51 行）
-
-先看整段函数做成了什么：
-
-```text
-调用前：LOG_INFO / LOG_ERR -> stderr（标准错误输出）-> 终端
-
-int os_errno;
-log_redirect("run.log", &os_errno) 成功后：
-        LOG_INFO / LOG_ERR -> stderr（标准错误输出）-> run.log
-```
-
-调用方不用修改任何一条 `LOG_INFO`。这个函数也不会主动写日志，它只是把**后续日志
-的去向**从终端改成指定文件。
-
-代码里有几个避不开的名字，先翻译成人话：
-
-| 代码里的名字 | 在这段函数里是什么意思 |
-|---|---|
-| `path` | 想把日志写到哪个文件，例如 `/tmp/run.log` |
-| `os_errno` | 输出参数；系统调用失败时保存具体 errno，成功或纯参数错误时为 0 |
-| `fd` | 系统为刚打开的文件分配的非负整数编号；以后用这个编号操作该文件 |
-| `stderr` | 标准错误输出；本项目所有 `LOG_*` 最终都写到这里，默认显示在终端 |
-| `STDERR_FILENO` | `stderr` 的数字编号，值是 2；代码写名字，读者不需要背“2 号” |
-| `open` | 打开或创建日志文件 |
-| `dup2` | 把一个已经打开的文件设为某个现有输出的全新去向 |
-| `close` | 关闭一个不再需要的文件编号 |
-
-### 9.1 先建立输出参数契约，再检查路径（第 28 到 33 行）
+### 第 22—51 行：log_redirect
 
 ```c
+// 日志重定向
+int log_redirect(const char *path, int *os_errno)
+{
+	int fd;
+	int saved_errno;
+
 	if (os_errno == NULL)
 		return ERR_PARAM;
 
 	*os_errno = 0;
 	if (path == NULL || path[0] == '\0')
 		return ERR_PARAM;
-```
 
-先确认 `os_errno` 可写，再清成 0；顺序不能反，否则空指针会被解引用。
-清零之后才检查路径，保证 `LOG_FILE=` 这种参数错误不会把旧 errno 带给调用方。
-
-两种"没给路径"都要拦：指针为空，以及指向一个空串。
-后者是 `getenv("LOG_FILE")` 在 `LOG_FILE=` 这样写时的返回值 ——
-环境变量存在但值为空，`getenv` 返回的是 `""` 不是 `NULL`。
-少了 `path[0] == '\0'` 这一半，`open("")` 会失败并返回 `ERR_IO`，
-错误码就报错了原因。
-
-### 9.2 打开日志文件并保存 open 的 errno（第 35 到 39 行）
-
-```c
 	fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
 	if (fd < 0) {
 		*os_errno = errno;
 		return ERR_IO;
 	}
-```
 
-`open` 成功后把文件编号放进 `fd`；失败时 `fd` 是负数。代码立即保存 `errno`，
-再返回项目层的 `ERR_IO`。不能只返回 `ERR_IO`，否则目录不存在、权限不足、磁盘异常
-都会退化成同一句 `device io failed`。
-
-| 选项 | 直接效果 | 不这样写的后果 |
-|---|---|---|
-| `O_WRONLY` | 只要求写文件的权限 | 日志没有读文件的需要 |
-| `O_CREAT` | 文件不存在时创建它 | 第一次运行、文件尚不存在时会失败 |
-| `O_APPEND` | 每一批新日志都接在旧内容末尾 | 用 `O_TRUNC` 会在每次启动时清空旧日志 |
-
-`O_APPEND` 还有一个以后会用到的保证：两个进程同时写时，系统会在每一次写入的
-最后一刻重新确定文件末尾。不要自己先查末尾、再另发一次写入；两步之间可能被
-另一个进程插进来，两边就会拿着同一个旧位置写，造成覆盖。
-
-这不是理论风险。02 章第 3.2 节两个进程各写 2000 条 17 字节的实测：
-`O_APPEND` 版五次全是 68000 字节一字不差，
-`lseek` 版五次分别是 46325 / 38964 / 34085 / 49062 / 45305，每次丢的量还不一样。
-
-判据 `[6r]` 就是把这里换成 `O_TRUNC`，看第二次运行后的行数从 26 掉回 13。
-
-`0644` 直接翻译为：文件拥有者可以读和写，同组用户及其他用户只能读。
-系统还可以根据当前的默认权限限制继续收紧它；这个限制的名字是 `umask`。
-所以 `0644` 是这次创建所允许的上限，不保证文件最终一定恰好是这个权限。
-
-### 9.3 改变去向，并保住 dup2 的 errno（第 41 到 47 行）
-
-```c
 	if (dup2(fd, STDERR_FILENO) < 0) {
 		// close 也可能改 errno，先保存 dup2 的失败原因
 		saved_errno = errno;
@@ -340,91 +159,51 @@ log_redirect("run.log", &os_errno) 成功后：
 		*os_errno = saved_errno;
 		return ERR_IO;
 	}
-```
 
-日志宏展开是 `fprintf(stderr, ...)`，六层里有几十处。要让它们改去处，
-不需要改这几十处，只需要把 `stderr` 的去向统一改一次。
-
-```text
-    open 成功后：
-        fd -----------------------> 日志文件
-        stderr -------------------> 终端
-
-    dup2(fd, STDERR_FILENO) 成功后：
-        fd ------------+
-                       +-----------> 日志文件
-        stderr --------+
-```
-
-`dup2(来源, 要改变的目标)` 的参数顺序不能反。这里的来源是刚打开的日志文件 `fd`，
-要改变的是 `stderr`。成功以后，所有继续写 `stderr` 的代码都会进入日志文件，
-终端不再显示这些日志。判据里“设了 `LOG_FILE` 时终端 0 行”量的就是这个结果。
-
-如果 `dup2` 失败，日志去向没有改成。刚才打开的文件已经没有用途，必须关闭；
-但 `close` 也是系统调用，可能覆盖全局 `errno`。因此先把 `dup2` 的失败原因存进
-`saved_errno`，清理之后再写入输出参数。顺序是“保存现场 → 清理资源 → 返回错误”。
-
-想继续理解 Linux 内部怎样保存这些去向，再看
-[`notes/00_基础/06_文件描述符与VFS.md`](../../../00_基础/06_文件描述符与VFS.md) 第 3 节。
-
-判据 `[6r2]` 把这个 `if` 的条件换成 `if (0)`，等于文件开了但 2 号没换，
-日志照旧去终端，日志文件是 0 行。`[6r3]` 则把 open 失败分支的
-`*os_errno = errno` 改成 0，证明退出码仍为 1 时具体失败原因仍可能丢失。
-
-### 9.4 为什么最后关闭 fd，日志仍能继续写（第 49 行）
-
-```c
 	close(fd);
+	return ERR_OK;
+}
 ```
 
-第一次读容易以为这行会让日志文件立刻失效。回到上一张图：`dup2` 成功后，
-`fd` 和 `stderr` 是两条通往同一个日志文件的路。后面的 `LOG_*` 只走 `stderr`，
-不再使用 `fd`，所以这里关闭的是多余的那条路。
+三段意图。`O_APPEND` 让多次运行的日志接着写（判据 [6]：两次运行后文件 26 行），
+内核保证每次 `write` 原子地追加到末尾。`dup2(fd, STDERR_FILENO)` 把 fd 2 接到
+文件上：之后全项目所有 `fprintf(stderr, ...)` 不改一行就落到文件里；`dup2` 成功
+会先关掉原来的 fd 2。最后 `close(fd)` 关掉中间 fd——它已经完成使命，不关就泄漏。
 
-如果不关，当前功能也可能正常，但程序会白占一个可用编号。程序能同时打开的文件
-数量有限，反复漏掉这些编号，长时间运行后可能再也打不开新文件。
+失败路径的资源顺序：open 成功而 dup2 失败时，fd 已占用必须归还；`close()` 本身
+可能改写 errno，所以先用 `saved_errno` 保存 dup2 的失败原因再 close，报给调用方的
+必须是 dup2 的原因。此处假设 `close` 不覆盖 `saved_errno` 之后再被读取——它先读后
+close，顺序保证了这一点。
 
-记住可观察结果即可：
+`*os_errno = 0` 在参数检查之后立即执行：调用方看到的 0 表示"没有系统调用失败"，
+项目级拒绝（`ERR_PARAM`）不带系统错误。判据 [6r3] 注错删掉 `*os_errno = errno;`
+后，`main.c` 的日志从 `device io failed (No such file or directory)` 退化成
+`device io failed`，这条判据见红。
 
-```text
-close(fd) 之前：fd 和 stderr 都能通往日志文件
-close(fd) 之后：只剩 stderr 通往日志文件，LOG_* 继续正常写
+## 4. 执行顺序
+
+```
+成功:  判参 → *os_errno=0 → open(成功, fd=3) → dup2(fd,2)(fd2 接文件,
+       旧 stderr 被关) → close(3) → ERR_OK
+失败1: os_errno==NULL 或 path 空  → ERR_PARAM(不碰 open)
+失败2: open 失败                  → *os_errno=errno, ERR_IO(fd 未成功, 无可归还)
+失败3: dup2 失败                  → saved_errno=errno → close(3) → ERR_IO
 ```
 
-### 9.5 这个函数没做的两件事
+每次进程运行至多调用一次，在 `main` 里任何层 init 之前；重复调用没有防护，
+也没有需要防护的状态（无全局句柄，fd 3 用完即关）。
 
-**没有 `fsync`，也没有 `O_SYNC`。** 数据进到内核就算数，剩下的交给内核回写。
-理由是代价：eMMC 上每条日志等一次 flash 擦写，程序会明显变慢。
-掉电时最多丢内核还没回写的那部分，但**不会丢用户态缓冲区那部分** ——
-后者才是 `stdout` 的问题，而这里走的是无缓冲的 `stderr`。
+## 5. 容易读错的地方
 
-**没有做日志轮转。** 文件会一直长。板子上的 `/tmp` 是 tmpfs，
-写爆了就是内存被吃光。这一条记在 `Todo/` 里，等 business 层真的开始写日志再解决。
+- `##__VA_ARGS__` 里的 `##` 是粘接记号，此处的作用是吞逗号，与字符串拼接无关。
+- `LOG_LEVEL=0` 时日志是预处理期消失，不是运行时被静音；产物里没有格式字符串。
+- `dup2` 成功后原来的 fd 2（终端）已关闭，回不去了；本函数没有提供恢复路径。
+- `close(fd)` 关的是中间 fd（3），fd 2 从此由文件顶替，两者此后无关。
+- `errno` 只有在系统调用失败时才有意义；先存再用，任何中间函数调用都可能改写它。
 
-## 10. 执行顺序
+## 6. 消费者清单
 
-这两个文件里的东西分布在三个完全不同的时刻，混起来读会读错。
-
-| 时刻 | 谁在干活 | 这时候发生了什么 |
-|---|---|---|
-| 预处理（编译之前） | cpp | `LOG_LEVEL` 的值定下来；关掉的那几级宏被替换成 `do {} while (0)`；`__FILE__` / `__LINE__` 被替换成常量 |
-| 编译 | cc1 | `enum` 成员变成常量，`ARRAY_SIZE` 已经是一个编译期常数 |
-| 运行 | 程序 | 只剩下 `fprintf` 调用、`err_str` 的 `switch`，以及 `log_redirect` 那三次系统调用 |
-
-第一行的直接后果是：**日志级别是编译期属性，同一份源码编出来的两个 `.bin`
-行为不同。** 判据第 5 组量的就是这件事。
-
----
-
-## 11. 消费者
-
-| 文件 | 用到的部分 |
-|---|---|
-| `main.c` | 错误码、`LOG_ERR`、`LOG_INFO`、`ARRAY_SIZE`、`err_str()` |
-| `display/disp_manager.c` 等六份 | `ERR_OK`、`LOG_INFO` |
-| `check.sh` 第 100 到 102 行 | `LOG_LEVEL` 这个编译期开关 |
-| `check.sh` 第 104 到 162 行 | `log_redirect()`，具体 errno，以及对 `O_APPEND`、`dup2`、errno 的三次注错 |
-| `Makefile` 第 30 行 | 通过 `CFLAGS_EXTRA` 把 `-DLOG_LEVEL=` 传进来 |
-
-`check.sh` 第 69 到 72 行临时造出来的那个 `display/disp_dummy.c` 也包含它，
-用的是 `ERR_NOTSUP`。那个文件只在判据运行期间存在。
+- 全部层与单测：`ERR_*`、`LOG_*`、`ARRAY_SIZE`。
+- `main.c`：`log_redirect()` 与 `err_str()`（日志落文件的完整报错）。
+- 判据：`check_core.sh` [5]（LOG_LEVEL=0 零输出）、[6] 及三条注错
+  （O_APPEND、dup2、errno 带出）、`TechReports/project/02` 章。

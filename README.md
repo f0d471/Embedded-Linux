@@ -125,7 +125,7 @@
       02_驱动开发/
       03_项目/          project/ 这棵代码树的工程文档，读者是要接手改代码的人
         TechReports/      每个工作点的开发过程，按时间线叙事，写完定稿
-        CodeReading/      每个文件逐行讲解，含行号，跟随最新代码
+        CodeReading/      各层逐行讲解，一行不落，含行号，跟随最新代码
         Todo/             未完成事项的 spec 与开发日志，完成后删除
         Bugs/             未修复的在产缺陷，修复后删除
     labs/        自己动手敲的实验代码，按 章号_名字 建目录。
@@ -193,7 +193,7 @@
             基础知识库已配套 5 篇：ELF / ARM 寄存器 / ABI 与 sysroot /
                                    静态库动态库与符号 / 系统调用
             L4 已落地并自验：project/ 六层空壳骨架 + 两棵产物树
-            工程文档已配套：TechReports 1 篇 + CodeReading 5 篇 + 路线图 1 篇
+            工程文档已配套：TechReports 1 篇 + CodeReading 对应篇 + 路线图 1 篇
             L1 / L2 / L3 待自己动手；串口上板闭环已真机验证：x86 格式错误、
             ARM 动态版 glibc 不匹配、ARM 静态版成功，命令与退出码已写回笔记
             上板统一走 tools/serial-board.ps1（不用 ADB）：串口登录、发命令、
@@ -213,7 +213,7 @@
             L4 已落地并自验：log_redirect() 让现有日志从终端改写到文件，
                              保留项目错误与系统 errno；六层代码一字未改；
                              check.sh  29 PASS / 0 FAIL / 0 SKIP
-            工程文档已配套：TechReports 第 02 章 + CodeReading 三篇订正
+            工程文档已配套：TechReports 第 02 章 + CodeReading 对应篇订正
             L1 / L2 / L3 待自己动手；fd/追加/mmap/异常退出、eMMC 同步写与
             project 日志判据均已在 ARM 真机经串口复跑，完整步骤与输出已写回笔记
         [ ] 03 Framebuffer 显示
@@ -236,8 +236,8 @@
             L4 已落地并自验：display 层注册链表 + 真假两个后端（mmap /dev/fb0 与 malloc
                              假显存）+ 画点填矩形 + unittest/disp_test 与两个独立计数脚本；
                              check.sh  52 PASS / 0 FAIL / 0 SKIP（判据 29 -> 52）
-            工程文档已配套：TechReports 第 03 章 + CodeReading 新增 display 层一篇、
-                            层管理器空壳 / Makefile / check 三篇订正
+            工程文档已配套：TechReports 第 03 章 + CodeReading display 层一篇、
+                            相关篇目订正
             display 层已上板（2026-09-22，未接显示器那一组）：停掉 mxapp2 之后
             disp_test 报 mode 1024x600x32 line_length 4096 与 fbset 一致；
             dd 读回一屏交给板上的 count.sh 数，计数与坐标和电脑上用假显存
@@ -246,7 +246,7 @@
             坑：交叉工具链的 glibc 比板上新（2.41 vs buildroot 2.30），动态产物
             报 GLIBC_2.38 not found 起不来，要 make LDFLAGS=-static（72 KB -> 495 KB）
             fbinfo / 假显存描点 / 按位段拼色 待自己动手；插 HDMI 那组待测
-        [ ] 04 文字显示（ASCII / 中文 / FreeType）
+        [x] 04 文字显示（ASCII / 中文 / FreeType）
             笔记已按 5 集字幕、PDF 182-215 页和配套源码重写：字符身份与字形分层、
             UTF-8 严格解码、ASCII/HZK16 点阵寻址、FreeType 灰度覆盖图、
             baseline/bbox/advance/26.6 排版、framebuffer alpha 合成与 font 层契约
@@ -258,8 +258,29 @@
             32bpp Ag 的 covered=written=nonblack=2162、bbox=(40,66)..(130,138)、217 色；
             A中g 为 3 glyph / 0 缺字，3650 个非黑像素；BUG_NO_ALPHA 后颜色从 217 降到 2；
             临时切到 RGB565 后 stride=2048、回读 1228800 字节，21 个低覆盖像素量化为黑；
-            实验结束已恢复 32bpp 并重启 mxapp2。L4 font 层仍留作自己动手
-        [ ] 05 输入系统
+            实验结束已恢复 32bpp 并重启 mxapp2
+            2026-09-23 L4 已直接落地：font provider 链 + builtin/FreeType 两后端，
+                       严格 UTF-8（含首坏字节）、baseline/bbox/26.6 advance、missing
+                       fallback、MONO/GRAY、正负 pitch、四边裁剪和 framebuffer alpha 合成；
+                       ARM 首次自动隔离构建 FreeType 2.10.2 静态库，不搬用主机动态库
+            本机真字体 Ag中：3 码点 / 0 缺字 / advance=6144 / 203 色；ASan 无报告
+            板上 msyh.ttc：covered/drawn/clipped=1758/1758/0；真 fb 为
+                           1280x720x16、stride=2560，回读 1843200 字节、74 色，边界完整
+            工程文档：TechReports 04（含 fig/04-font层架构.svg）
+        [x] 05 输入系统（时间压缩路径：不另写课件，直接完成 L4）
+            input provider 链 + replay/evdev 两后端；原始记录只在 SYN_REPORT 提交，
+            SYN_DROPPED 与 EOF 半帧丢弃；支持 REL 鼠标、ABS/MT 触摸、普通按键、
+            持续按钮位图、绝对坐标缩放、相对坐标四边钳制和总 deadline poll
+            没照搬参考项目的读取线程/环形队列：队满静默丢失、条件等待和退出协议
+            留到第 07 章统一处理；当前同步 poll 没有后台线程生命周期竞争
+            本机与 ARM 回放输出逐项一致，共 5 帧；ASan 无报告；畸形回放和
+            /dev/null 冒充 evdev 均被拒绝
+            板上真实 evdev 自动选中 gpio-keys event1，5 秒 poll 干净超时；当时未接
+            USB 鼠标，故不宣称真实 pointer 动作已验证，接鼠标后只需复跑现有 --once
+            工程文档：TechReports 05（含 fig/05-input层架构.svg）+ Bugs/01
+            project/check.sh 最终 73 PASS / 0 FAIL / 0 SKIP（52 -> 73）
+            CodeReading 重排为一层一篇，共 8 篇（common/display/font/input/
+            空壳三层与 main/unittest/Makefile/check 脚本）
         [ ] 06 网络通信
         [ ] 07 多线程
         [ ] 08 I2C

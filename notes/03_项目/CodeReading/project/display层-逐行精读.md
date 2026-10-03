@@ -1,69 +1,52 @@
-# display 层 逐行精读
+# display 层逐行精读
 
-对应代码：
+对应代码：`project/display/disp_manager.h`（46 行）、`disp_manager.c`（195 行）、
+`memdisp.c`（112 行）、`framebuffer.c`（98 行）。
 
-```
-    project/display/disp_manager.h     45 行   公共类型与对外接口
-    project/display/disp_manager.c    151 行   注册链表、选后端、画点、填矩形
-    project/display/memdisp.c         112 行   假显存后端（malloc 出来的一块内存）
-    project/display/framebuffer.c      98 行   真显存后端（mmap /dev/fb0）
-    project/unittest/disp_test.c       42 行   单测：画一张固定图案
-    project/unittest/count.sh          73 行   独立计数脚本（od + awk，板上也能跑）
-    project/unittest/count.py          30 行   同上，python 版
-```
+## 1. 文件定位
 
-前置：[common](common-逐行精读.md)（错误码与日志宏）、
-[层管理器空壳](层管理器空壳-逐行精读.md)（这一层被填之前的样子）。
-这一层的知识背景在 [`../../../01_应用编程/03_Framebuffer显示.md`](../../../01_应用编程/03_Framebuffer显示.md)，
-本篇只讲代码。
+对上提供画布信息与画点/混色/填矩形，对下按名字选一个后端。两个后端：
+`framebuffer.c` 开真设备（全项目唯一认识 `linux/fb.h` 的文件），`memdisp.c` 用
+malloc 内存冒充显存（WSL 可跑、行尾带哨兵）。上游是 font 层的
+`disp_blend_pixel()`、单测 `disp_test` 与未来的 ui/page。
 
----
-
-## 1. 这一层解决什么
-
-上层要说的是"把 (11,1) 这个点画成蓝色"。到内存里要变成两件互不相干的事：
+前置知识：[从零开始读写 project 代码](../00-从零开始读写项目代码.md)第 5 节
+（函数指针与链表）、第 6 节（位运算与颜色）；第 03 章笔记（Framebuffer）。
 
 ```
-    写到哪个地址   = base + y * line_length + x * (bpp / 8)      只跟坐标和几何有关
-    写进去什么值   = 红 << 红offset | 绿 << 绿offset | 蓝 << 蓝offset   只跟颜色和位段有关
+font / ui / disp_test          font / ui / disp_test
+        │ disp_put_pixel              │ disp_blend_pixel
+        ▼                             ▼
+┌──────────────────────── disp_manager.c ────────────────────────┐
+│  pack_field(位段拼色)   unpack_field(位段展开)   fill_rect 裁剪 │
+└───────┬────────────────────────────────────────┬───────────────┘
+        │ g_cur->open/close/flush                 │
+   framebuffer.c(/dev/fb0, ioctl+mmap)      memdisp.c(malloc, 0xAA 哨兵)
 ```
 
-两件事都需要一组参数：`base`、`line_length`、`bpp`、三个分量的位置。
-这组参数由**后端**提供，manager 只管用。后端有两个：
+## 2. disp_manager.h
 
-| 后端 | 那块内存是什么 | 用在哪 |
-|---|---|---|
-| `mem` | `malloc` 出来的一块 | 电脑上跑判据。WSL 没有 `/dev/fb0`，整条链路靠它才验得了 |
-| `fb` | `mmap` 出来的真显存 | 板子上跑，写进去屏幕直接变 |
-
-`mem` 不只是"没有硬件时的替身"。它的行宽**故意**大于一行像素占的字节数，
-行尾填 `0xAA` 当哨兵，所以它能查出真板子上查不出来的错——
-板上 `line_length` 是 4096，而 1024 x 4 也是 4096，行尾没有填充，
-把行宽算成 `xres * bpp / 8` 在板上画出来的图是**对的**。判据 `[7r2]` 记录了这件事。
-
----
-
-## 2. 头文件（`disp_manager.h` 全文 45 行）
-
-### 2.1 位段描述（第 4 到 8 行）
+### 第 1—8 行：guard 与位段
 
 ```c
+#ifndef __DISP_MANAGER_H
+#define __DISP_MANAGER_H
+
+/* 一个颜色分量在像素里的位置: 从第 offset 位起, 占 length 位 */
 struct disp_field {
 	int offset;
 	int length;
 };
 ```
 
-一个颜色分量在像素里的位置：从第 `offset` 位起，占 `length` 位。
+`disp_field` 是像素格式的事实来源。板上插 HDMI 时驱动把模式从 xRGB8888 切成
+RGB565，位段随模式变化，所以任何代码都不得写死"红在 16..23 位"，一律从
+`disp_buf` 现场读。
 
-**没有直接用 `struct fb_bitfield`**，虽然它的前两个成员一模一样。
-理由是这个头文件不能包含 `linux/fb.h`：包含了的话，
-`unittest/disp_test.c`、以后的 font 层、ui 层都会跟着看见帧缓冲的全部 API，
-"只有 display 认识硬件"这条分层就守不住了。判据 `[10]` 守的就是这一条。
-
-### 2.2 一块能画的内存（第 10 到 18 行）
+### 第 10—23 行：画布与矩形
 
 ```c
+/* 后端交给 manager 的"一块能画的内存"。上层只读 */
 struct disp_buf {
 	int  xres;
 	int  yres;
@@ -72,23 +55,26 @@ struct disp_buf {
 	struct disp_field red, green, blue;
 	unsigned char *base;
 };
-```
 
-第 1 节那两个公式需要的量，一个不多一个不少。
-
-`line_length` 那行注释是整个头文件里最重要的一句。它不是提醒，是**判据的依据**：
-如果这两个值永远相等，`mem` 后端就没有存在的必要了。
-
-`base` 是 `unsigned char *` 而不是 `void *`：地址计算要按字节走，
-`void *` 上做指针加法是 GNU 扩展，标准 C 里没有定义。
-
-### 2.3 区域与后端表（第 20 到 32 行）
-
-```c
+/* 一块矩形区域, 左闭右开: 覆盖 x <= X < x + w */
 struct disp_region {
 	int x, y, w, h;
 };
+```
 
+`line_length` 单独存在的理由：板上 1280x720x16 时它是 2560 = 1280x2，1024x600x32
+时是 4096 = 1024x4，两者相等；但假显存故意配成 64x32x32x320（一行只需 256 字节，
+给 320），行尾 64 字节是哨兵区——把行宽算成 `xres * bpp / 8` 的错误只在有填充的
+显存上暴露（判据 [7r1]/[7r2] 专门对照了这一点）。`base` 注释"上层只读"：
+真显存是 mmap 的共享映射，越界写会写坏别人的内存。
+
+矩形是左闭右开约定：`x <= X < x+w`。后面 `fill_rect` 的裁剪与 `disp_test` 的
+图案设计都用这个约定。
+
+### 第 25—32 行：后端接口
+
+```c
+/* 一个显示后端。每个后端定义一份, 在自己的 xxx_register 里挂进链表 */
 struct disp_ops {
 	const char *name;
 	int  (*open)(struct disp_buf *out);
@@ -98,19 +84,12 @@ struct disp_ops {
 };
 ```
 
-`disp_region` 是左闭右开的：覆盖 `x <= X < x + w`。和 `for` 循环的写法天然配合，
-也避免了"宽度 0 的矩形"这种要特判的边界。
+五个成员就是后端要回答的全部问题：叫什么、把画布交出来、归还、提交区域、
+链上下一个。`open` 的参数是出参（调用方提供 `disp_buf` 存储），与
+`font_bitmap` 的借用不同——`disp_buf` 的字段是后端抄进去的值，`base` 指向的
+内存生命周期由后端管，`close` 之后失效。
 
-`disp_ops` 是这一层的核心形状，课程配套项目里叫 `DispOpr`。
-三个函数指针加一个链表指针，一个后端填一份。
-`next` 让 manager 能把任意多个后端串起来，运行时按 `name` 选一个——
-这正是[路线图](../../Todo/项目路线图-对齐电子产品量产工具.md) 3.1 条要补的"注册链表"。
-
-`open` 收一个出参 `struct disp_buf *out`：后端把自己那块内存的参数**填进去**，
-而不是 manager 去问后端要。两种写法的差别在于，出参这种写法下
-后端不需要导出任何 getter，内部状态一个都不用暴露。
-
-### 2.4 对外接口（第 34 到 43 行）
+### 第 34—46 行：对外函数
 
 ```c
 void disp_register(struct disp_ops *ops);
@@ -121,26 +100,35 @@ void display_exit(void);
 /* 上层接口。颜色一律是 0x00RRGGBB, 拼成什么像素值由本层决定 */
 const struct disp_buf *disp_get_buf(void);
 int  disp_put_pixel(int x, int y, unsigned int rgb);
+int  disp_blend_pixel(int x, int y, unsigned int rgb, unsigned char alpha);
 int  disp_fill_rect(const struct disp_region *r, unsigned int rgb);
 int  disp_flush(const struct disp_region *r);
+
+#endif /* __DISP_MANAGER_H */
 ```
 
-`display_init` / `display_exit` 的签名**一个字都没改**。
-这是填这一层时的硬约束：`main.c` 的层表不动，判据 `[1]` 不动。
+颜色契约写在注释里：上层永远给 8 位分量的 `0x00RRGGBB`，位段拼色由本层按
+`g_buf` 现场做。`disp_blend_pixel` 是 04 章为灰度字形加的入口，多一个
+`alpha` 参数；其余四个是骨架期就定下的。
 
-"颜色一律是 `0x00RRGGBB`"这句注释是跨层约定，04 章的 font 层按它写的规格。
-16 位色的板子上，上层照样传 8 位分量，缩位是这一层的事。
+## 3. disp_manager.c
 
-`disp_get_buf` 返回 `const` 指针：上层能读画布尺寸（单测就靠它算右下角坐标），
-但改不了。
-
----
-
-## 3. manager（`disp_manager.c` 全文 151 行）
-
-### 3.1 三个文件级状态（第 14 到 19 行）
+### 第 1—19 行：说明与全局
 
 ```c
+/*
+ * display 层管理器。对上提供画布信息和画点/混色/填矩形, 对下按名字选一个后端。
+ *
+ * 后端选择来自环境变量 DISP_DEV, 缺省 fb。缺省不做"fb 打不开就退回 mem"的回退,
+ * 否则板上出问题时程序会静默画进一块没人看的内存。
+ */
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "common.h"
+#include "display/disp_manager.h"
+
 extern void fb_register(void);
 extern void memdisp_register(void);
 
@@ -149,14 +137,11 @@ static struct disp_ops *g_cur;    /* 当前选中的后端, NULL 表示未启动
 static struct disp_buf  g_buf;    /* 当前后端交出来的画布 */
 ```
 
-两个 `extern` 声明写在 `.c` 里而不是头文件里。这是有意的：
-`fb_register` 和 `memdisp_register` 只有 manager 一个调用者，
-放进头文件等于告诉所有人"你也可以注册"。
+头部注释记录了一个设计决定：init 失败就失败，不做静默回退。板上 fb 打不开时
+程序当场退出，问题在上板那一刻暴露；静默回退会把故障推迟到"画了但没人看见"。
+`extern` 声明避免为两个 register 函数单独开头文件——它们只在这一处被调。
 
-`g_cur` 身兼两职：既是"当前用哪个后端"，也是"这一层启动了没有"。
-空壳版里那个 `g_inited` 标志因此不需要了，状态少一个就少一处可能不一致的地方。
-
-### 3.2 注册与查找（第 21 到 35 行）
+### 第 21—35 行：注册与查找
 
 ```c
 void disp_register(struct disp_ops *ops)
@@ -176,15 +161,13 @@ static struct disp_ops *disp_find(const char *name)
 }
 ```
 
-头插：新来的挂在最前面。两行的顺序不能反——
-先 `g_list = ops` 再 `ops->next = g_list`，节点的 `next` 就指向自己了。
+头插注册：新节点的 `next` 指向旧链头，再改链头。两步顺序不能换，否则丢掉旧链。
+`disp_register` 不判 `NULL`——display 层的两个调用点都是本目录的静态对象，
+前提由 `display_init` 固定的注册顺序保证；font 层的同名函数判了 `NULL`，
+因为它的 provider 还会被单测注册（见 font 篇）。两处差异是各自上游的实际约定，
+不是疏忽。
 
-`disp_register` 收的是**指针**，不复制结构体。所以每个后端那张 `disp_ops` 表
-必须活得比链表久：两个后端都把它定义成文件作用域的 `static` 变量
-（`memdisp.c` 第 102 行、`framebuffer.c` 第 88 行）。
-写成函数内的局部变量，函数一返回链表上就是野指针。
-
-### 3.3 启动（第 37 到 68 行）
+### 第 37—68 行：display_init
 
 ```c
 int display_init(void)
@@ -221,29 +204,15 @@ int display_init(void)
 }
 ```
 
-**第 46 行那句 `g_list = NULL;` 是本篇最值得看的一行。** 少了它，
-`init` -> `exit` -> `init` 这个序列会把链表做成自环：
-第二轮 `disp_register` 执行 `ops->next = g_list`，而此时 `g_list` 就是 `ops` 自己。
+第 46 行 `g_list = NULL` 是踩过坑的补丁：后端是静态对象，init/exit/init 两轮时
+`memdisp_register` 会在已经是链尾的节点上再做一次头插，`ops->next` 指向自己，
+`disp_find` 沿链死循环。exit 里没有清 `g_list`（见第 70—80 行），清链的职责
+放在 init 开头，"每轮重建"的语义只写一处。
 
-它的现场是无限循环，不是崩溃，所以很难查。实测（在单测里连跑两轮 init/exit）：
+选后端失败（`ERR_NOTFOUND`）与 open 失败（透传后端错误码）分开报：
+前者是配置错，后者是设备错，板上排查时第一步就是分辨这两条日志。
 
-| 版本 | `DISP_DEV=mem` | `DISP_DEV=nosuch` |
-|---|---|---|
-| 有这一行 | `init1 0 / init2 0 / done`，退出码 0 | 正常报 not found |
-| 删掉这一行 | 一样是 0，看不出问题（`mem` 正好是链表头，第一次比较就命中） | 卡死，`timeout 5` 杀掉，退出码 124 |
-
-`main.c` 现在只 init 一次，所以这个 bug 在当前代码里不会发作。
-它属于"以后加一个切换显示设备的功能时立刻发作"的那一类。
-
-**缺省后端是 `fb` 而不是 `mem`。** 并且不做"fb 打不开就退回 mem"的回退：
-回退看起来贴心，实际后果是板上显示出问题时程序默默画进一块没人看的内存，
-现象是"屏幕没反应但程序说一切正常"。宁可启动失败。
-代价是本机跑判据要显式设 `DISP_DEV=mem`，`check.sh` 第 19 行统一设了。
-
-失败时 `g_cur = NULL`（第 62 行）不能省：`open` 失败但 `g_cur` 还指着那个后端的话，
-后面 `disp_put_pixel` 的 `g_cur == NULL` 检查就挡不住了，会拿着没填过的 `g_buf` 算地址。
-
-### 3.4 关闭与取画布（第 70 到 87 行）
+### 第 70—87 行：exit 与 get_buf
 
 ```c
 void display_exit(void)
@@ -257,15 +226,20 @@ void display_exit(void)
 
 	LOG_INFO("display exit OK");
 }
+
+const struct disp_buf *disp_get_buf(void)
+{
+	if (g_cur == NULL)
+		return NULL;
+	return &g_buf;
+}
 ```
 
-`memset` 把画布清零，其中包括 `base`。不清的话，`close` 之后 `g_buf.base`
-还指着一块已经 `free` 或 `munmap` 掉的内存。虽然 `g_cur = NULL` 已经能挡住所有入口，
-但留着一个悬垂指针没有任何好处。
+exit 幂等：未启动直接返回，调用方（`layers_exit` 回滚路径）不需要问"启动过吗"。
+`memset` 清画布描述，防止 exit 后 `disp_get_buf` 返回残留几何——虽然 `g_cur==NULL`
+已经让它返回 NULL，双保险的成本是一次 32 字节清零。
 
-`sizeof(g_buf)` 而不是写死字节数：以后 `disp_buf` 加字段，这行不用改。
-
-### 3.5 拼色（第 89 到 93 行）
+### 第 89—102 行：位段拼色与展开
 
 ```c
 /* 把一个 8 位分量缩到 length 位再挪到 offset 位。length 为 8 时 c8 原样返回 */
@@ -273,22 +247,28 @@ static unsigned int pack_field(unsigned int c8, const struct disp_field *f)
 {
 	return (c8 >> (8 - f->length)) << f->offset;
 }
+
+/* 把 framebuffer 位段展开回 0..255，供 alpha 混色读取背景。 */
+static unsigned int unpack_field(unsigned int pixel, const struct disp_field *f)
+{
+	unsigned int mask = (1u << f->length) - 1;
+	unsigned int value = (pixel >> f->offset) & mask;
+
+	return (value * 255u + mask / 2) / mask;
+}
 ```
 
-上层给的是 8 位分量，硬件要的是 `length` 位。**丢低位不丢高位**：
-高位决定"大致多红"，低位只是细微差别。丢高位会让深红变成亮红。
+`pack_field` 右移丢弃低位（高位对齐），RGB565 红 5 位时 `0xff >> 3 = 0x1f`。
+`length==8` 时 `8-8=0`，移位为零次，原样返回——32 位格式不需要特判。
 
-`length` 为 8 时 `c8 >> 0` 就是原值，所以 32 位色和 16 位色用的是同一个公式，
-没有 `switch (bpp)`。硬件换格式时这一层不用改——板上插 HDMI 后驱动会自己
-把模式从 1024x600x32 改成 1280x720x16，同一个二进制不重编就能画对。
+`unpack_field` 的 `(value * 255 + mask/2) / mask` 是把 `length` 位数值等比放大回
+8 位的四舍五入：5 位最大值 31 → `(31*255+15)/31 = 255`，两端对齐。混色的背景
+读数必须经过这一步，否则 5 位背景直接当 8 位用，半透明结果整体偏暗。
 
-参数用 `unsigned int`：移位运算在有符号数上的行为部分由实现定义，位运算一律用无符号。
+`mask = (1u << f->length) - 1` 用 `1u`：`length` 为 32 时 `1 << 32` 是未定义行为，
+`unsigned` 至少保证 31 位内安全；本项目位段最长 8 位，这里是写法上的设防。
 
-判据 `[7r5]` 注错时把这行改成 `(c8) << f->offset`，16 位色下
-**红色仍然正确**（`f800`），绿变 `1fe0`、蓝变 `00ff`。只验红色的判据会假绿，
-所以 `[7]` 组数的是整行像素值分布，三个原色一起验。
-
-### 3.6 画点（第 95 到 122 行）
+### 第 104—131 行：disp_put_pixel
 
 ```c
 int disp_put_pixel(int x, int y, unsigned int rgb)
@@ -321,20 +301,66 @@ int disp_put_pixel(int x, int y, unsigned int rgb)
 }
 ```
 
-边界检查四条边都要，`>=` 不是 `>`：宽 64 的画布合法 x 是 0 到 63。
-判据 `[7r3]` 删掉 `x >= g_buf.xres` 之后，越界那个点写进了上一行的行尾填充区，
-哨兵从 2048 个变成 2044 个——**少的正好是一个 32 位像素占的 4 个字节**。
+地址公式 `base + y * line_length + x * bpp/8` 是本层最核心的一行：行距用
+`line_length`（字节），列距用每像素字节数，两个独立的量。判据 [7r1] 把它注错成
+`y * (xres * bpp / 8)`，行尾有填充的假显存上像素分布立刻错位；[7r2] 再证明同一个
+错误在无填充的 64x32x32x256 上看不出来——这就是假显存故意配 320 行宽的理由。
 
-三个 `pack_field` 用 `|` 拼起来，因为三个分量占的位互不重叠。
+16/32 位各一次直接写；对齐由后端保证（fb 的 mmap 基址页对齐、memdisp 是
+malloc 结果），`x * bpp/8` 恒为偶数，`unsigned short` 写入不会踩到未对齐地址。
+其它位深显式拒绝，不猜。
 
-`*(unsigned short *)p = v` 这种写法，把按字节走的指针临时当成宽指针用，
-决定了"一次写几个字节"。这件事写在类型里，没法用变量表达，
-所以拼色能查表而这里必须 `switch`。
+### 第 133—166 行：disp_blend_pixel（04 章新增）
 
-`default` 分支现在到不了（两个后端都只给 16 或 32），留着是为了以后
-有人加了 24 位色的后端却忘了改这里时当场报错，而不是写坏内存。
+```c
+int disp_blend_pixel(int x, int y, unsigned int rgb, unsigned char alpha)
+{
+	unsigned char *p;
+	unsigned int old, br, bg, bb, fr, fg, fb, mixed;
 
-### 3.7 填矩形与刷新（第 124 到 151 行）
+	if (g_cur == NULL)
+		return ERR_PARAM;
+	if (x < 0 || y < 0 || x >= g_buf.xres || y >= g_buf.yres)
+		return ERR_PARAM;
+	if (alpha == 0)
+		return ERR_OK;
+	if (alpha == 255)
+		return disp_put_pixel(x, y, rgb);
+
+	p = g_buf.base + y * g_buf.line_length + x * (g_buf.bpp / 8);
+	if (g_buf.bpp == 16)
+		old = *(unsigned short *)p;
+	else if (g_buf.bpp == 32)
+		old = *(unsigned int *)p;
+	else
+		return ERR_NOTSUP;
+
+	br = unpack_field(old, &g_buf.red);
+	bg = unpack_field(old, &g_buf.green);
+	bb = unpack_field(old, &g_buf.blue);
+	fr = (rgb >> 16) & 0xff;
+	fg = (rgb >> 8) & 0xff;
+	fb = rgb & 0xff;
+	fr = (fr * alpha + br * (255 - alpha) + 127) / 255;
+	fg = (fg * alpha + bg * (255 - alpha) + 127) / 255;
+	fb = (fb * alpha + bb * (255 - alpha) + 127) / 255;
+	mixed = (fr << 16) | (fg << 8) | fb;
+	return disp_put_pixel(x, y, mixed);
+}
+```
+
+两个边界分支各有语义：`alpha==0` 完全透明，直接返回，省一次读显存；
+`alpha==255` 完全不透明，等价于画点，转调 `disp_put_pixel` 复用它的位段与
+越界逻辑。中间值才走"读背景 → 展开 → 混合 → 经 `0x00RRGGBB` 写回"的完整链，
+写回时 `pack_field` 再把分量压回真实位段。
+
+混合式 `+ 127) / 255` 是四舍五入的整数写法（`/255` 换成 `>>8` 时加 128，
+这里直接除以 255 配 127 偏置）。手算例：背景 `0x204060`、前景 `0xe0a020`、
+alpha=64 的红通道 `(224×64 + 32×191 + 127)/255 = 80`，判据 [11] 的探针
+第二个像素 `00505850` 即此值。前提：`alpha` 在 0..255 内，`unsigned char`
+保证了这一点；背景像素值不超过位段范围，由写入口保证。
+
+### 第 168—195 行：fill_rect 与 flush
 
 ```c
 /*
@@ -358,39 +384,59 @@ int disp_fill_rect(const struct disp_region *r, unsigned int rgb)
 			disp_put_pixel(x, y, rgb);
 	return ERR_OK;
 }
+
+int disp_flush(const struct disp_region *r)
+{
+	if (g_cur == NULL)
+		return ERR_PARAM;
+	return g_cur->flush(r);
+}
 ```
 
-外层循环走行、内层走列：同一行的像素在内存里连着，这个顺序对 cache 友好。
+注释回答了"有了 put_pixel 的边界检查，为什么这里还要裁剪"：省掉屏外点的函数
+调用，并且未来改为整块 memcpy 时仍有一道边界。判据 [7r6] 注错删掉右边界裁剪，
+输出分布不变（证明冗余边界确实兜住了），这条判据钉住的是"以后改写法时不能
+没有它"。
 
-**这四行裁剪注错不红**，判据 `[7r6]` 把这件事记了下来并让它 PASS。
-注错不红只有两种可能：判据没覆盖，或者被注错的代码本来就多余。
-这里是后者——边界已经由 `put_pixel` 兜住了。留着的理由写在函数上方的注释里：
-一是不白跑屏外的点，二是以后为了速度让 `fill_rect` 绕开 `put_pixel` 直接
-`memset` 整行时，这四行就是唯一的越界防线，那时这条判据才开始起作用。
+`disp_flush` 只透传。单缓冲模型下两个后端的 flush 都是空的（写进去下一场就
+扫出来了），接口留给以后的双缓冲/脏矩形。
 
-`disp_flush` 只做一件事：转发给当前后端的 `flush`。两个后端的 `flush` 现在都是空的，
-它存在是为了以后接双缓冲时上层不用改。
+## 4. memdisp.c
 
----
-
-## 4. 假显存后端（`memdisp.c` 全文 112 行）
-
-### 4.1 两个文件级状态（第 20 到 21 行）
+### 第 1—21 行：存在理由与全局
 
 ```c
+/*
+ * 假显存后端: 用一块 malloc 出来的内存冒充 framebuffer。
+ *
+ * 存在的理由有两个: WSL 上没有 /dev/fb0, 本后端让整条链路在电脑上跑通;
+ * 以及它的行宽故意大于一行像素占的字节数, 能暴露"把行宽当成
+ * 宽 x 每像素字节数"这类在真板子上看不出来的错误。
+ *
+ * 环境变量:
+ *     DISP_MEM        宽x高x位深x行宽, 缺省 64x32x32x320
+ *     DISP_MEM_DUMP   关闭时把整块内存原样写入该路径
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "common.h"
+#include "display/disp_manager.h"
+
 static unsigned char *g_mem;   /* 假显存首地址, NULL 表示未打开 */
 static size_t g_size;          /* 假显存总字节数 */
 ```
 
-`g_mem` 兼作"开了没有"的标志，这是 `mem_close` 能被安全重复调用的基础。
-
-### 4.2 打开（第 23 到 69 行）
-
-参数从环境变量来，缺省 `64x32x32x320`：
+### 第 23—69 行：mem_open
 
 ```c
+static int mem_open(struct disp_buf *out)
+{
 	const char *spec = getenv("DISP_MEM");
 	int w = 64, h = 32, bpp = 32, ll = 320;
+	int y;
 
 	if (spec != NULL && sscanf(spec, "%dx%dx%dx%d", &w, &h, &bpp, &ll) != 4) {
 		LOG_ERR("bad DISP_MEM: %s", spec);
@@ -401,14 +447,7 @@ static size_t g_size;          /* 假显存总字节数 */
 		LOG_ERR("bad geometry %dx%dx%d ll %d", w, h, bpp, ll);
 		return ERR_PARAM;
 	}
-```
 
-两道检查分工不同：`sscanf` 只保证**格式**对（读到了四个整数），
-第二道保证**值**合理。缺了第二道，`DISP_MEM=0x0x7x3` 也能一路走到 `malloc`。
-
-缺省值里行宽 320 比一行像素的 256 字节多 64 字节，这 64 字节就是查错用的填充区。
-
-```c
 	g_size = (size_t)ll * h;
 	g_mem = malloc(g_size);
 	if (g_mem == NULL)
@@ -419,20 +458,48 @@ static size_t g_size;          /* 假显存总字节数 */
 		memset(g_mem + y * ll, 0x00, w * bpp / 8);
 		memset(g_mem + y * ll + w * bpp / 8, 0xAA, ll - w * bpp / 8);
 	}
+
+	out->xres = w;
+	out->yres = h;
+	out->bpp = bpp;
+	out->line_length = ll;
+	out->base = g_mem;
+
+	if (bpp == 32) {
+		/* xRGB8888: 最高 8 位不用 */
+		out->red.offset = 16;   out->red.length = 8;
+		out->green.offset = 8;  out->green.length = 8;
+		out->blue.offset = 0;   out->blue.length = 8;
+	} else {
+		/* RGB565: 绿色多一位 */
+		out->red.offset = 11;   out->red.length = 5;
+		out->green.offset = 5;  out->green.length = 6;
+		out->blue.offset = 0;   out->blue.length = 5;
+	}
+
+	return ERR_OK;
+}
 ```
 
-`(size_t)ll * h` 先把一个操作数转成 `size_t` 再乘：两个 `int` 相乘的结果还是 `int`，
-一块 4K 屏的显存就是 3300 万字节，离 21 亿虽然还远，但这种转换是无成本的保险。
+哨兵是本后端的核心设计：像素区黑、填充区 `0xAA`，任何越界写都会把 `0xAA`
+冲掉，独立计数脚本（count.sh/count.py）数填充区还剩几个 `0xAA` 就能抓住
+越界（判据 [11] 的 `pad_AA 2048`）。几何校验里 `ll < w * bpp / 8` 拒绝
+比像素区还窄的行宽——那不是"有填充的显存"，是不一致的参数。
 
-`0xAA` 选得刻意：二进制 `10101010`，既不是 0 也不是 0xFF，不会和黑、白或任何一个
-正常的颜色分量撞上。
+位段这里写死两种，与 fb 后端"从 var 抄"形成对照：假显存自己就是位段定义者，
+抄无可抄。
 
-位段按 bpp 分两套填（第 55 到 65 行），32 位是 xRGB8888，16 位是 RGB565。
-这是后端的职责：manager 那边不认识任何一种具体格式。
-
-### 4.3 关闭时把内存交出去（第 71 到 94 行）
+### 第 71—112 行：close、flush、注册
 
 ```c
+static void mem_close(void)
+{
+	const char *dump;
+	FILE *fp;
+
+	if (g_mem == NULL)
+		return;
+
 	/* 只倒原始字节, 统计交给外部脚本: 自己数自己画的东西, 判据永远 PASS */
 	dump = getenv("DISP_MEM_DUMP");
 	if (dump != NULL) {
@@ -448,33 +515,67 @@ static size_t g_size;          /* 假显存总字节数 */
 	free(g_mem);
 	g_mem = NULL;
 	g_size = 0;
+}
+
+static int mem_flush(const struct disp_region *r)
+{
+	(void)r;
+	return ERR_OK;
+}
+
+static struct disp_ops g_mem_ops = {
+	.name = "mem",
+	.open = mem_open,
+	.close = mem_close,
+	.flush = mem_flush,
+};
+
+void memdisp_register(void)
+{
+	disp_register(&g_mem_ops);
+}
 ```
 
-注释里那句话是这一层判据体系的地基。如果让这个文件自己统计
-"我画了 12 个红点"再打印出来，那么它数错和画错会一起错，判据永远绿。
-**倒出原始字节，交给 `count.sh` 去数**，两边不共享任何代码。
+第 79 行注释是判据体系的原则：被测程序只交原始字节，计数由
+`unittest/count.sh`、`count.py` 两份互不共享代码的实现独立算
+（判据 [7] 还有两条实现互校）。判据写进被测对象，它就永远不会红。
+`(void)r` 显式吞掉未用参数，配合 `-Wextra -Werror`。
 
-`fopen` 失败要报出来，不能默默跳过：跳过的话外部脚本会读到上一次的旧文件，判据假绿。
+## 5. framebuffer.c
 
-`free` 之后置 `NULL` 和 `0`，维持 4.1 节那个约定。判据 `[9r]` 删掉 `free` 之后
-ASan 报 `Direct leak of 10240 byte(s) in 1 object(s)`，10240 正好是 320 x 32。
-
----
-
-## 5. 真显存后端（`framebuffer.c` 全文 98 行）
-
-### 5.1 状态的初值（第 22 到 24 行）
+### 第 1—24 行：说明与全局
 
 ```c
+/*
+ * 真显存后端: open /dev/fb0, 两次 ioctl 问出几何与位段, mmap 拿到显存。
+ *
+ * 全项目只有这个文件认识 linux/fb.h, 上面几层都只看 struct disp_buf。
+ * 位段一律从 var 里抄, 不写死 565 或 8888: 板上插 HDMI 时驱动会自己
+ * 把模式从 1024x600x32 改成 1280x720x16, 写死的程序必错其一。
+ *
+ * 环境变量:
+ *     DISP_FB   设备路径, 缺省 /dev/fb0
+ */
+
+#include <fcntl.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+#include <linux/fb.h>
+
+#include "common.h"
+#include "display/disp_manager.h"
+
 static int g_fd = -1;                       /* -1 表示未打开, 0 是合法 fd */
 static unsigned char *g_base = MAP_FAILED;  /* mmap 失败返回的是 MAP_FAILED 不是 NULL */
 static size_t g_size;
 ```
 
-两个初值都不是 0，两行注释各写了一个理由。这两个坑都会让 `fb_close` 干错事：
-`g_fd` 初值 0 会关掉标准输入；拿 `NULL` 判 `mmap` 的结果则永远判不出失败。
+两个初值都是纠错写法：fd 0 是合法描述符（stdin），"未打开"必须用 -1 表示；
+mmap 失败返回 `MAP_FAILED`，用 `NULL` 判断会把它当成功。
 
-### 5.2 幂等的 close（第 26 到 37 行）
+### 第 26—37 行：fb_close
 
 ```c
 /* 幂等: 每种资源自己判断在不在, 所以 open 的任何一个失败分支都能直接调它 */
@@ -491,24 +592,21 @@ static void fb_close(void)
 }
 ```
 
-这是这一层最值得抄走的结构。`fb_open` 有三处可能失败，每处已经拿到的资源都不同：
+每种资源自带"在不在"判断与状态复位，open 的任何失败分支直接 `fb_close()`
+不会有二次释放。这是本仓资源清理的固定形状，font 层的 `freetype_close` 同型。
 
-| 失败点 | 此时手上有什么 | 要还什么 |
-|---|---|---|
-| `open` 失败 | 什么都没有 | 什么都不用还 |
-| `ioctl` 失败 | fd | `close(fd)` |
-| `mmap` 失败 | fd | `close(fd)` |
-
-每个分支各写一遍清理代码，就会有一处写漏。
-**让 close 自己判断每种资源在不在，三个分支都调它**，就不会漏、也不会重复。
-课程配套项目那边的失败路径就是漏了 `close(fd)`。
-
-先 `munmap` 后 `close` 是"后申请的先释放"，和空壳篇里那句
-"顺序与申请时相反"是同一条规矩。
-
-### 5.3 打开（第 39 到 79 行）
+### 第 39—79 行：fb_open
 
 ```c
+static int fb_open(struct disp_buf *out)
+{
+	struct fb_var_screeninfo var;
+	struct fb_fix_screeninfo fix;
+	const char *path = getenv("DISP_FB");
+
+	if (path == NULL)
+		path = "/dev/fb0";
+
 	g_fd = open(path, O_RDWR);
 	if (g_fd < 0) {
 		LOG_ERR("open %s failed", path);
@@ -520,121 +618,94 @@ static void fb_close(void)
 		fb_close();
 		return ERR_IO;
 	}
-```
 
-`O_RDWR` 不能换成 `O_WRONLY`：后面 `mmap` 带了 `PROT_READ`，
-映射的权限不能超过打开文件的权限。
-
-两个 `ioctl` 用 `||` 串起来，短路求值保证第一个失败时不白跑第二个。
-
-设备路径可以用 `DISP_FB` 覆盖（第 44 行）。这不是多余的灵活性：
-`DISP_FB=/dev/null` 能 `open` 成功但 `ioctl` 必定 `ENOTTY`，
-正好停在"fd 已开、ioctl 失败"那一步，让判据 `[8]` 能在没有帧缓冲的电脑上验失败路径。
-
-```c
 	/* 只映射一屏, 不映射 fix.smem_len: 板上 smem 是 32 MiB 而一屏只要 2.4 MiB,
 	   多映射出来的部分会把越界写变成静默写坏, 而不是当场 SIGSEGV */
 	g_size = (size_t)fix.line_length * var.yres;
 	g_base = mmap(NULL, g_size, PROT_READ | PROT_WRITE, MAP_SHARED, g_fd, 0);
-```
+	if (g_base == MAP_FAILED) {
+		LOG_ERR("mmap %s failed", path);
+		fb_close();
+		return ERR_IO;
+	}
 
-`MAP_SHARED` 不能换成 `MAP_PRIVATE`：私有映射的写入进的是一份写时复制的副本，
-程序自己读得到，屏幕上什么都不会变——这种 bug 没有任何报错。
-
-```c
+	out->xres = var.xres;
+	out->yres = var.yres;
+	out->bpp  = var.bits_per_pixel;
+	out->line_length = fix.line_length;
 	out->red   = (struct disp_field){ var.red.offset,   var.red.length   };
 	out->green = (struct disp_field){ var.green.offset, var.green.length };
 	out->blue  = (struct disp_field){ var.blue.offset,  var.blue.length  };
+	out->base  = g_base;
+	return ERR_OK;
+}
 ```
 
-位段从 `var` 里抄，一位都不写死。板上插 HDMI 的一瞬间驱动会读 EDID 并改模式
-（1024x600x32 变成 1280x720x16），dmesg 里一行日志都不留。
-写死 565 的程序不插屏时全错，写死 8888 的程序插屏后全错，照抄的程序两种都对。
+`var`（可变参数：分辨率、位深、位段）与 `fix`（固定参数：行宽、显存总量）
+分两次 ioctl 问，各管各的。只映射一屏是刻意的：`smem_len` 有 32 MiB，
+越界写多映射的部分不报错只写坏；映射一屏时越界写当场 `SIGSEGV`，错误在
+第一现场暴露。判据 [8] 用 `/dev/null`（能 open，ioctl 必 ENOTTY）钉住
+"open 成功、ioctl 失败"这个中间态的系统调用序列 `openat ioctl close`。
 
-内核那边叫 `bits_per_pixel`，这里叫 `bpp`。换名字抄一遍正是这一层的价值：
-上层不必认识内核的命名。
+位段四行从 `var` 现抄，板上实测 1024x600x32 与 1280x720x16 两种模式都靠
+这一段自适应，`disp_put_pixel` 不需要知道模式存在。
 
----
+### 第 81—98 行：flush 与注册
 
-## 6. 单测（`unittest/disp_test.c` 全文 42 行）
+```c
+/* 单缓冲直接映射, 写进去下一帧就扫到了, 没有要提交的东西 */
+static int fb_flush(const struct disp_region *r)
+{
+	(void)r;
+	return ERR_OK;
+}
 
-它有自己的 `main`，链接时带上除 `main.o` 外的全部 `.o`（见 Makefile 精读）。
-画的图案每一笔都有针对性：
+static struct disp_ops g_fb_ops = {
+	.name  = "fb",
+	.open  = fb_open,
+	.close = fb_close,
+	.flush = fb_flush,
+};
 
-| 画什么 | 验什么 |
-|---|---|
-| 全屏填黑 | `fill_rect` 走完整块画布不崩；给计数一个干净底 |
-| (1,1) 红 4x3、(6,1) 绿 4x3、(11,1) 蓝 4x3 | 三个分量的位段都对；坐标不从 0 开始，行宽算错会整体偏 |
-| (xres-1, yres-1) 一个白点 | 最后一行最后一列，行宽算错必定跑到别处 |
-| (xres-2, 5) 起黄色 4x2 | 只有 2x2 在屏内，验右边界裁剪 |
-| (xres, 0) 写一个白点 | 越界必须被拒，返回值打出来给外部验 |
-
-程序自己不统计任何东西，只打印两行：`mode` 行和越界返回值。
-`mode` 行本身也是一条判据——上板后它必须和 `fbset` 报的一致。
-
-结尾必须调 `display_exit()`：转储文件是在 `mem_close` 里写的，不调就没有文件。
-
----
-
-## 7. 计数脚本（`unittest/count.sh` 73 行、`count.py` 30 行）
-
-两个脚本做同一件事，输出格式完全一样：
-
-```
-size 10240 pad_AA 2048 pad_total 2048
-00000000:2007 000000ff:12 0000ff00:12 00ff0000:12 00ffff00:4 00ffffff:1
-at (1,1)=00ff0000 (4,3)=00ff0000 ...
+void fb_register(void)
+{
+	disp_register(&g_fb_ops);
+}
 ```
 
-`count.sh` 只用 `od` 和 `awk`，板子上没有 python 也能跑，而且是流式处理，
-不把整块显存读进数组——板上一屏 2.4 MiB，读进 awk 数组会很慢。
-`count.py` 留着是因为它短，看得清算法。
-
-判据 `[7]` 里有一条专门比对两者的输出是否逐字节相同：
-**两个独立实现互校**，一个写错了另一个不会跟着错。
-
-三行输出里最该看的是第一行的 `pad_AA` 和第二行的合计：
+## 6. 执行顺序
 
 ```
-    2007 + 12 x 3 + 4 + 1 = 2048 = 64 x 32      一个像素不多不少
-    pad_AA 2048 = (320 - 256) x 32              一个哨兵都没被冲掉
+成功:  display_init → 重建链表 → fb_register + memdisp_register
+       → DISP_DEV 选后端 → open 问几何/位段/拿内存 → g_buf 就绪
+       → put_pixel / blend_pixel / fill_rect 任意次 → flush(空)
+       → display_exit → close 归还 fd 与映射
+
+失败1: DISP_DEV=nosuch        → ERR_NOTFOUND(链表在, 无资源)
+失败2: fb 后端 open 失败       → fb_close 归还已取得的资源, g_cur=NULL
+失败3: mem 后端 malloc 失败    → ERR_NOMEM
+退出后: g_list 仍在, g_cur=NULL; 下轮 init 开头重建链表
 ```
 
-单看"红色 12 个"证明不了什么，这两个等式把整块画布封死了。
+层序前提：input 层 init 要读 `disp_get_buf()` 的几何（假屏宽高），
+font 层 draw 要写像素，所以层表里 display 排第一（见 main 篇）。
 
----
+## 7. 容易读错的地方
 
-## 8. 执行顺序
+- `line_length` 与 `xres * bpp / 8` 只在行尾有填充时不同；假显存配 320 就是为了
+  让这个不同可见。判据 [7r2] 证明无填充时错误静默。
+- `disp_field` 是"从第 offset 位起占 length 位"，RGB565 的绿在 5..10；
+  读反成"高到低"会把拼色写错（判据 [7r5] 注错不缩位见红）。
+- `unpack_field` 不是简单左对齐补零，是等比放大加四舍五入；直接
+  `value << (8-length)` 会让 5 位最大值 31 变成 248 而非 255。
+- mmap 的返回值失败是 `MAP_FAILED`；fd 的"未打开"是 -1，0 是合法 fd。
+- 单缓冲下 flush 为空是模型决定的，调用它不产生任何效果；双缓冲接进来时
+  flush 才有语义。
 
-以 `DISP_DEV=mem ./build/x86/unittest/disp_test` 为例：
+## 8. 消费者清单
 
-| 步 | 谁在跑 | 可观测结果 |
-|---|---|---|
-| 1 | `display_init()` | `g_list` 清空，两个后端挂上去（链表顺序 mem -> fb） |
-| 2 | `disp_find("mem")` | 第一个就命中 |
-| 3 | `mem_open(&g_buf)` | `malloc` 10240 字节，刷黑加哨兵，填满 `g_buf` |
-| 4 | `printf("mode ...")` | `mode 64x32x32 line_length 320` |
-| 5 | 六次 `disp_fill_rect` + 一次 `disp_put_pixel` | 画图案，全部落在 `g_mem` 里 |
-| 6 | 越界的 `disp_put_pixel` | 返回 `ERR_PARAM`，打印 `out of range put_pixel ret -1` |
-| 7 | `disp_flush` -> `mem_flush` | 空操作，返回 `ERR_OK` |
-| 8 | `display_exit()` -> `mem_close()` | 整块内存写进 `DISP_MEM_DUMP` 指的文件，`free` |
-| 9 | 外部 `count.sh` | 独立解开转储文件，数出三行 |
-
-换成 `DISP_DEV=fb` 时只有第 3 步和第 8 步不同：`mem_open` 换成 `fb_open`
-（`open` + 两次 `ioctl` + `mmap`），`mem_close` 换成 `fb_close`（`munmap` + `close`）。
-中间画图那几步走的是同一份代码。
-
----
-
-## 9. 消费者
-
-| 文件 | 用到的部分 |
-|---|---|
-| `main.c` 第 6 行、第 21 行 | 只用 `display_init` / `display_exit`，层表里那一行没变过 |
-| `unittest/disp_test.c` | `disp_get_buf` / `disp_put_pixel` / `disp_fill_rect` / `disp_flush` 全套 |
-| `check.sh` 第 19 行 | `export DISP_DEV=mem`，让前六组判据能在没有帧缓冲的电脑上跑 |
-| `check.sh` 第 189 到 300 行 | `[7]` 到 `[10]` 四组，共 23 条 |
-| 以后的 font 层（04 章） | 按 `0x00RRGGBB` 的约定调 `disp_put_pixel` 画字模 |
-
-`main.c` 一个字都没改，是这一层交付的一部分：
-从空壳换成真实现，层表、判据 `[1]`、启停顺序全都没受影响。
+- font 层：`disp_blend_pixel`（逐像素混色）、`disp_get_buf`（裁剪边界与几何）。
+- `unittest/disp_test.c` 与 input 单测：画布、图案、几何。
+- 判据：`check_core.sh` [7]~[10]（像素对账、fb 失败路径、ASan、分层边界），
+  `check_font_input.sh` [11]（0xAA 哨兵）。
+- 未来的 ui/page：同样只依赖 `disp_manager.h` 的六个入口。

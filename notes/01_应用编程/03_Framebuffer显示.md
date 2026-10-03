@@ -2070,7 +2070,7 @@ D2 到 D4 的判据都要进 `project/check.sh`，每条正判据后面跟一条
 按 `notes/03_项目/README.md` 的对照表：
 
 ```text
-  CodeReading/project/层管理器空壳-逐行精读.md    display 那部分拆出去，新写 display 层精读
+  CodeReading/project/                      display 层一篇(manager 与两个后端合篇)
   TechReports/project/                            新一篇：display 层，六节固定结构
   Todo/项目路线图                                  3.1 注册链表、3.4 unittest 两条勾掉
   README 进度                                     check.sh 的新 PASS 数

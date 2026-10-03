@@ -1,60 +1,51 @@
 # project 逐行精读
 
-对应 `project/` 下的全部源文件，共 6 篇。
+对应 `project/` 的全部交付源码、脚本与输入 fixture，共 8 篇。
+**一个层（或一个构建/判据单元）一篇**：同一层的 manager、内部头与后端互相
+咬合，拆成每文件一篇会把一条执行路径切成几段；篇内每个被覆盖文件仍有自己的
+行号区间，代码增删时定位不受影响。
 
-这棵树是一个骨架加一层实现：六层都在，其中五层还是空壳，
-最下面那层 display 在第 03 章填成了真的——能选显示后端、能画点、能填矩形，
-板上写进去屏幕就变。除此之外的内容是"加一层的时候要动哪些地方"这个约定、
-守住这个约定的判据，以及把日志整条接到文件上（第 02 章加的）。
-为什么是这个形状，见 [`../../TechReports/project/`](../../TechReports/project/) 的[第 01 章](../../TechReports/project/01-先立骨架-分层启停与两棵产物树.md)（骨架）、[第 02 章](../../TechReports/project/02-日志落文件-让现有LOG自动写入文件.md)（日志落文件）和[第 03 章](../../TechReports/project/03-display层-两个后端与一张能数的图.md)（display 层）。
+当前实现包括六层生命周期骨架、display 真/假后端、font builtin/FreeType 后端
+和 input evdev/replay 后端。为什么采用这些形状，见
+[`../../TechReports/project/`](../../TechReports/project/) 的 01—05 章。
+
+## 推荐阅读顺序
+
+```
+common -> display -> font / input -> 空壳三层与 main
+            |          |                  |
+            +-- unittest + fixture ------+
+Makefile 负责构建，三个 check 脚本从外部守住上述关系
+```
 
 ## 篇目
 
-按依赖关系排列，从下往上读。
+| 对应文件 | CodeReading | 行数 | 定位 |
+|---|---|---:|---|
+| `include/common.h`、`common.c` | [common](common-逐行精读.md) | 101 | 错误码、日志宏、日志落文件 |
+| `display/disp_manager.h/.c`、`memdisp.c`、`framebuffer.c` | [display 层](display层-逐行精读.md) | 451 | 画布、真假后端、位段拼色与 alpha 混色 |
+| `font/font_manager.h/.c`、`font_internal.h`、`font_builtin.c`、`font_freetype.c` | [font 层](font层-逐行精读.md) | 583 | 严格 UTF-8、provider 链、排版与借用契约 |
+| `input/input_manager.h/.c`、`input_internal.h`、`evdev.c`、`replay.c` | [input 层](input层-逐行精读.md) | 631 | SYN 帧、坐标状态机、能力打分与回放 |
+| `main.c`、`ui/`、`page/`、`business/` 各 h/c | [空壳三层与 main](空壳三层与main-逐行精读.md) | 220 | 层表顺序启停与失败回滚 |
+| `unittest/` 全部（三个 _test.c、count.py/sh、两个回放 fixture） | [unittest](unittest-逐行精读.md) | 363 | 单层测试与独立计数 |
+| `Makefile` | [Makefile](Makefile-逐行精读.md) | 123 | x86/ARM 两棵产物树、FreeType 隔离构建 |
+| `check.sh`、`check_core.sh`、`check_font_input.sh` | [check 脚本](check脚本-逐行精读.md) | 500 | 73 条判据与注错见红 |
 
-| 篇                            | 对应文件                              |          行数 | 这个文件做什么                      |
-| ---------------------------- | --------------------------------- | ----------: | ---------------------------- |
-| [common](common-逐行精读.md)     | `include/common.h` + `common.c`   |     50 + 51 | 全项目公共约定：错误码、分级日志、数组长度宏、日志重定向 |
-| [层管理器空壳](层管理器空壳-逐行精读.md)     | `input/` 等五层的 `*_manager.{c,h}`   | 27 + 13 各五份 | 一层的最小形状：两个函数，一个幂等标志          |
-| [display 层](display层-逐行精读.md) | `display/*.{c,h}` + `unittest/*`  |         551 | 注册链表选后端，画点填矩形；真假两个后端；单测与独立计数脚本 |
-| [main](main-逐行精读.md)         | `main.c`                          |         100 | 层表驱动的启停，失败只回滚已成功的层           |
-| [Makefile](Makefile-逐行精读.md) | `Makefile`                        |          85 | 一棵源码树编出两棵产物树，外加单独链接的单测       |
-| [check.sh](check-逐行精读.md)    | `check.sh`                        |         305 | 52 条判据，每组正判据配一次注错见红          |
+## 维护规则
 
-## 三个贯穿全目录的约定
+1. 上表每个路径只能出现在一篇里；新增源文件归入所在层的那一篇，同时更新
+   本表的行数列。
+2. 每篇正文的行号区间从每个文件第 1 行连续覆盖到末行；空行也包含在相邻
+   区间内。
+3. `rg --files project` 出现新交付文件时，同一改动中把它的内容并入对应层
+   篇目并订正行号。
+4. build 产物不进精读；输入 fixture 决定状态机判据，随 unittest 篇覆盖。
 
-**调用方向只能向下，`main.c` 站在楼外面。**
-六层自底向上是 display、input、font、ui、page、business，
-上层可以调下层，反过来不行。`main.c` 不 `open` 任何设备节点，
-不认识 `/dev` 下的任何路径，只认每层的 `init` / `exit` 两个函数指针。
+## 当前状态
 
-**层的对外接口只导出上层真正要用的东西，内部状态一概不导出。**
-还没填实现的五层，头文件里只有两行函数声明。
-display 填完之后多了两个结构体和四个画图函数——上层要画东西，
-就必须知道画布的形状，这是导出的下限；而 `g_fd`、`g_mem`、`g_list`
-这些内部状态一个都没出现，`linux/fb.h` 也没进头文件。
-判据 `[10]` 把后半句变成了可执行的检查。
-
-**加一层只动两处。** 新建一个 `.c`，在 `main.c` 的层表里加一行。
-`Makefile` 不用动，因为源文件是 `$(wildcard)` 按目录收的；
-判据也不用动，因为它数的是自己算出来的源文件个数。
-
-## 已知的空实现
-
-读代码时会遇到几处结构完整但当前不干活的地方，列在这里免得反复追。
-
-| 位置 | 情况 |
-|---|---|
-| 除 display 外五层的 `*_init()` 函数体 | 只置一个标志、打一行日志，`TODO` 注释里写着哪一章来填 |
-| 两个后端的 `flush` | 空实现返回成功。单缓冲直接写显存，没有要提交的东西；接双缓冲时才有内容 |
-| `main.c` 的 `main_loop()` | 打一行日志就返回，页面事件循环等 page 层有实现之后再接 |
-| `Makefile` 的 `LDFLAGS` / `LDLIBS` | 空。接 freetype 和 pthread 时才有内容 |
-| `log_redirect` 的日志轮转 | 没有。文件会一直长，等 business 层按测试项写日志时再解决 |
-
-## 目标形状
-
-这棵树对标的是课程配套项目 `06_实战项目/01_电子产品量产工具`，
-六个层名和调用方向都取自那边。那边的核心形状是"结构体加函数指针加链表注册"，
-第 03 章已经在 display 层引进来了（`struct disp_ops` + `disp_register`），
-剩下五层按各自的章节陆续补。两边的逐项差异与补齐顺序见
-[`../../Todo/项目路线图-对齐电子产品量产工具.md`](../../Todo/项目路线图-对齐电子产品量产工具.md)。
+ui、page、business 仍只有生命周期骨架；display 两个后端的 flush 在单缓冲
+模型下为空。font 与 input 已不是空壳：前者具备严格 UTF-8、builtin/FreeType
+与 alpha 绘制，后者具备 replay/evdev、SYN 帧聚合与相对/绝对坐标。
+input 层有一项已登记未修的缺陷（同帧 pointer+key 丢键，见
+[`../../Bugs/01-同帧指针与普通键丢事件.md`](../../Bugs/01-同帧指针与普通键丢事件.md)），
+精读把该分支的现状如实写出，不做修好后的描述。

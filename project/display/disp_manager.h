@@ -39,6 +39,7 @@ void display_exit(void);
 /* 上层接口。颜色一律是 0x00RRGGBB, 拼成什么像素值由本层决定 */
 const struct disp_buf *disp_get_buf(void);
 int  disp_put_pixel(int x, int y, unsigned int rgb);
+int  disp_blend_pixel(int x, int y, unsigned int rgb, unsigned char alpha);
 int  disp_fill_rect(const struct disp_region *r, unsigned int rgb);
 int  disp_flush(const struct disp_region *r);
 

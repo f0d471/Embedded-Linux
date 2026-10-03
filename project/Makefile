@@ -1,8 +1,8 @@
-# 量产工具项目顶层 Makefile
+# 网络视频终端项目顶层 Makefile
 #
 # 用法:
 #   make                                本地 x86 版, 产物 build/x86/product_tool
-#   make CROSS=arm-linux-gnueabihf-     ARM  版,    产物 build/arm/product_tool
+#   make CROSS=arm-linux-gnueabihf-     ARM 版；首次自动隔离构建静态 FreeType
 #   make V=1                            显示完整编译命令
 #   make clean                          只删当前架构的产物
 #   make distclean                      删掉整个 build/
@@ -34,10 +34,29 @@ LIB_OBJS  := $(filter-out $(BUILD)/main.o,$(OBJS))
 
 DEPS    := $(OBJS:.o=.d) $(TESTS:=.d)
 
-# -I. 让跨层引用写成 "display/disp_manager.h", 一眼看得出是跨层
-CFLAGS  := -Wall -Wextra -O2 -I. -Iinclude $(CFLAGS_EXTRA)
-LDFLAGS :=
-LDLIBS  :=
+# FreeType: x86 走系统 pkg-config；ARM 从资料包源码隔离构建到当前架构产物树。
+ifeq ($(ARCH),arm)
+  FT_VERSION  := 2.10.2
+  FT_TARBALL  ?= ../../01_all_series_quickstart-master/04_嵌入式Linux应用开发基础知识/source/10_freetype/freetype-$(FT_VERSION).tar.xz
+  FT_ROOT     := $(BUILD)/deps/freetype
+  FT_SRC      := $(FT_ROOT)/freetype-$(FT_VERSION)
+  FT_STAGE    := $(FT_ROOT)/stage
+  FT_STAMP    := $(FT_STAGE)/.installed
+  FREETYPE_CFLAGS ?= -I$(FT_STAGE)/usr/include/freetype2
+  FREETYPE_LIBS   ?= $(FT_STAGE)/usr/lib/libfreetype.a -lm
+else
+  PKG_CONFIG ?= pkg-config
+  FREETYPE_CFLAGS ?= $(shell $(PKG_CONFIG) --cflags freetype2 2>/dev/null)
+  FREETYPE_LIBS   ?= $(shell $(PKG_CONFIG) --libs freetype2 2>/dev/null)
+endif
+
+# -I. 让跨层引用写成 "display/disp_manager.h", 一眼看得出是跨层。
+# FreeType 的头文件目录属于预处理选项，库放在对象文件之后的 LDLIBS。
+CPPFLAGS := -I. -Iinclude $(FREETYPE_CFLAGS) $(CPPFLAGS_EXTRA)
+CFLAGS   := -Wall -Wextra -Werror -O2 $(CFLAGS_EXTRA)
+LDFLAGS  :=
+LDLIBS   :=
+override LDLIBS += $(FREETYPE_LIBS)
 
 ifeq ($(V),1)
   Q :=
@@ -66,7 +85,25 @@ $(BUILD)/unittest/%: $(BUILD)/unittest/%.o $(LIB_OBJS)
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "  CC    $<"
-	$(Q)$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
+	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c -o $@ $<
+
+ifeq ($(ARCH),arm)
+$(FT_STAMP):
+	@test -f "$(FT_TARBALL)" || { echo "missing $(FT_TARBALL)"; exit 1; }
+	@mkdir -p "$(FT_ROOT)"
+	@echo "  DEP   freetype-$(FT_VERSION) (ARM static)"
+	$(Q)tar -xJf "$(FT_TARBALL)" -C "$(FT_ROOT)"
+	$(Q)cd "$(FT_SRC)" && ./configure \
+		--host=$(patsubst %-,%,$(CROSS)) --prefix=/usr \
+		--enable-static --disable-shared --without-harfbuzz --without-brotli \
+		--without-bzip2 --without-png --without-zlib >/dev/null
+	$(Q)$(MAKE) -C "$(FT_SRC)" -j2 >/dev/null
+	$(Q)$(MAKE) -C "$(FT_SRC)" DESTDIR="$(abspath $(FT_STAGE))" install >/dev/null
+	$(Q)touch "$@"
+
+$(BUILD)/font/font_freetype.o: $(FT_STAMP)
+$(BIN) $(TESTS): | $(FT_STAMP)
+endif
 
 # -include 对不存在的文件不报错, 所以第一次编译时不需要再套一层 wildcard 过滤
 -include $(DEPS)
@@ -77,6 +114,7 @@ show:
 	@echo "CC    = $(CC)"
 	@echo "SRCS  = $(SRCS)"
 	@echo "OBJS  = $(OBJS)"
+	@echo "FT    = $(FREETYPE_LIBS)"
 
 clean:
 	rm -rf $(BUILD)

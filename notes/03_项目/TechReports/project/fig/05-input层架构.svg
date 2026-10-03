@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="560" viewBox="0 0 1240 560">
+  <rect width="1240" height="560" fill="#ffffff"/>
+
+  <!-- 图例: 线型承载"是否已接入"这一种语义 -->
+  <line x1="880" y1="28" x2="940" y2="28" stroke="#315a73" stroke-width="2"/>
+  <text x="948" y="32" font-family="sans-serif" font-size="12" fill="#17364b">已接入调用</text>
+  <line x1="1052" y1="28" x2="1112" y2="28" stroke="#9aa4ad" stroke-width="2" stroke-dasharray="6 4"/>
+  <text x="1120" y="32" font-family="sans-serif" font-size="12" fill="#9aa4ad">未接入</text>
+
+  <!-- 上游: 未接入的消费者 -->
+  <rect x="430" y="56" width="300" height="56" fill="none" stroke="#9aa4ad" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="580" y="80" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#17364b">ui / page 鼠标切页</text>
+  <text x="580" y="100" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#9aa4ad">网络视频终端 刀 9(未接入)</text>
+  <line x1="580" y1="112" x2="580" y2="150" stroke="#9aa4ad" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="592" y="138" font-family="sans-serif" font-size="11" fill="#9aa4ad">input_get_event(out, timeout_ms)</text>
+
+  <!-- 左列: 两个 provider -->
+  <rect x="40" y="140" width="300" height="150" fill="#ffffff" stroke="#315a73" stroke-width="2"/>
+  <text x="190" y="162" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#17364b">evdev.c / g_evdev</text>
+  <text x="190" y="184" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">扫描 /dev/input/event0..31</text>
+  <text x="190" y="204" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">EVIOCGBIT 能力打分</text>
+  <text x="190" y="224" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">REL鼠标 400 / ABS触摸 300</text>
+  <text x="190" y="242" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">普通键 100 / 名含 power 10</text>
+  <text x="190" y="262" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">探测 fd 用完即关, 选中后重开</text>
+  <text x="190" y="280" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">INPUT_DEV 可强制指定节点</text>
+
+  <rect x="40" y="340" width="300" height="110" fill="#ffffff" stroke="#315a73" stroke-width="2"/>
+  <text x="190" y="362" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#17364b">replay.c / g_replay</text>
+  <text x="190" y="384" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">INPUT_REPLAY 文本回放</text>
+  <text x="190" y="404" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">每行 5 字段, 第 6 字段拒绝</text>
+  <text x="190" y="424" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">声明绝对量程 0..4095</text>
+
+  <!-- provider → manager -->
+  <line x1="340" y1="215" x2="430" y2="260" stroke="#315a73" stroke-width="2"/>
+  <line x1="340" y1="395" x2="430" y2="330" stroke="#315a73" stroke-width="2"/>
+  <text x="352" y="238" font-family="sans-serif" font-size="11" fill="#17364b">read_raw()</text>
+  <text x="352" y="352" font-family="sans-serif" font-size="11" fill="#17364b">read_raw()</text>
+
+  <!-- 中间: manager -->
+  <rect x="430" y="150" width="300" height="300" fill="#ffffff" stroke="#315a73" stroke-width="2"/>
+  <text x="580" y="172" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#17364b">input_manager.c</text>
+  <text x="580" y="192" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">poll + parse_raw 同步帧归并</text>
+  <text x="445" y="216" font-family="sans-serif" font-size="12" fill="#17364b">deadline = monotonic()+timeout</text>
+  <text x="445" y="236" font-family="sans-serif" font-size="12" fill="#17364b">EINTR 后重算剩余时间</text>
+  <text x="445" y="256" font-family="sans-serif" font-size="12" fill="#17364b">SYN_REPORT 才交付应用事件</text>
+  <text x="445" y="276" font-family="sans-serif" font-size="12" fill="#17364b">SYN_DROPPED 丢弃至下个 REPORT</text>
+  <text x="445" y="296" font-family="sans-serif" font-size="12" fill="#17364b">相对: clamp(x+dx, [0,w-1])</text>
+  <text x="445" y="316" font-family="sans-serif" font-size="12" fill="#17364b">绝对: scale_abs 中间值 int64</text>
+  <text x="445" y="336" font-family="sans-serif" font-size="12" fill="#17364b">按钮位图跨帧保持</text>
+  <text x="445" y="356" font-family="sans-serif" font-size="12" fill="#17364b">几何取自 disp_get_buf()</text>
+  <text x="445" y="386" font-family="sans-serif" font-size="11" fill="#555555">INPUT_BACKEND / INPUT_DEV</text>
+  <text x="445" y="404" font-family="sans-serif" font-size="11" fill="#555555">ERR_BUSY 超时 / ERR_NOTFOUND EOF</text>
+  <text x="445" y="428" font-family="sans-serif" font-size="11" fill="#555555">显示几何来自 display 层</text>
+
+  <!-- manager → 右列 -->
+  <line x1="730" y1="200" x2="880" y2="200" stroke="#315a73" stroke-width="2"/>
+  <line x1="730" y1="330" x2="880" y2="330" stroke="#315a73" stroke-width="2"/>
+
+  <!-- 右列: 验收 -->
+  <rect x="880" y="150" width="320" height="100" fill="#ffffff" stroke="#315a73" stroke-width="2"/>
+  <text x="1040" y="172" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#17364b">unittest/input_test.c</text>
+  <text x="1040" y="194" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">--probe 打印来源 / --once 5 秒</text>
+  <text x="1040" y="214" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">回放与真实设备同一程序</text>
+  <text x="1040" y="234" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">板上选 gpio-keys, 5 秒干净超时</text>
+
+  <rect x="880" y="290" width="320" height="80" fill="none" stroke="#315a73" stroke-width="1.5"/>
+  <text x="1040" y="315" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">check_font_input.sh [13][14]</text>
+  <text x="1040" y="335" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">8 条判据 + 3 次注错见红</text>
+  <text x="1040" y="355" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#555555">五帧输出逐行对账</text>
+
+  <!-- 已知缺陷: 未修复, 灰虚线 -->
+  <rect x="880" y="410" width="320" height="80" fill="none" stroke="#9aa4ad" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="1040" y="435" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#17364b">Bugs/01 同帧 pointer+key 丢键</text>
+  <text x="1040" y="455" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#9aa4ad">parse_raw 的 pointer 分支清掉同帧普通键</text>
+  <text x="1040" y="473" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#9aa4ad">现有五帧 fixture 未覆盖, 待修</text>
+</svg>
