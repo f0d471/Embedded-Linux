@@ -19,7 +19,7 @@
 工作方式固定为：翻 PDF 到某一章 -> 到对应 source 目录找那份代码 -> 读本仓的解读
 -> 做本仓的实验。
 
-重要：PDF 目录里标的页码比阅读器里的实际页码小 9。本仓 refs/章节对照表.md
+重要：PDF 目录里标的页码比阅读器里的实际页码小 9。本仓 sources/README.md
 里两个页码都给了，以「PDF 页」列为准直接跳页。
 
 ## 二、笔记的定位（本仓的核心）
@@ -46,7 +46,7 @@
    也能把"哪一步在内核里、哪一步在用户态"这种边界画清楚。不要用中文字符的
    显示宽度撑边框或排多栏；这类 ASCII 图换字体或换预览器就会错位。
 
-2. 基础知识库 notes/00_基础/：主线章节里遇到的通用名词，凡是不属于本章主线、
+2. 基础知识库 knowledge/fundamentals/：主线章节里遇到的通用名词，凡是不属于本章主线、
    以后还会反复出现的（寄存器 r0/s0、ELF、sysroot、PLT/GOT、系统调用...），
    都单开一篇放这里，主线里只留一句话加一个跳转 [基础]。
 
@@ -135,7 +135,7 @@
                  传文件并校验 SHA-256（本仓不用 ADB）。
     refs/        章节对照表：PDF 页码、视频分集、资料仓源码位置三者的对照。
 
-`notes/` 主线章节和 `notes/03_项目/` 的分工：前者讲"这个知识点怎么学会"，
+`knowledge/` 教程和 `Engineering/` 的分工：前者讲"这个知识点怎么学会"，
 后者讲"这段代码为什么长这样、这一行在算什么"。同一件事在两边都出现是正常的。
 
 ## 六、文档规则
@@ -143,7 +143,7 @@
 **每一次 commit，都要在同一次 commit 里把它影响到的文档改完。**
 
 完整的对照表（改了什么就必须同步哪份文档）在
-[notes/03_项目/README.md](notes/03_项目/README.md) 的"项目规则：提交即更新文档"一节。
+[Engineering/README.md](Engineering/README.md) 的"项目规则：提交即更新文档"一节。
 两条硬约束先记在这里：
 
     1. CodeReading/ 每一节标题都带行号区间。代码增删行后，全篇行号一并订正。
@@ -156,12 +156,12 @@
     [x] 00 基础知识库  2026-09-08 全部八篇按新体例重写完毕
                        2026-09-12 开头块再修订：改成"一句话本质 -> 你从哪儿撞见它
                        -> 它被什么逼出来 -> 关键细节"，结论条数按内容定不再写死
-                       体例与四条换代理由见 notes/00_基础/README.md
+                       体例与四条换代理由见 knowledge/fundamentals/README.md
                        2026-09-15 为第 03 章补三篇：08 进程与信号 / 09 驱动与设备文件 /
                        10 显示原理（起因是 03 章二十来个术语没定义就用，见 00_基础/README 问题 5）
                        2026-09-16 为第 04 章补两篇：11 数据表示 / 12 第三方库的交叉构建与部署
         现有十三篇各配一个 check.sh，合计 311 条判据全绿（09 篇有 11 条要 root），每篇都做过注错见红。
-        一次跑全部：for d in labs/00_basics/*/; do bash "$d/check.sh"; done
+        一次跑全部：for d in knowledge/labs/00_basics/*/; do bash "$d/check.sh"; done
 
         00 从源码到运行     新写，其余各篇的前置。四个程序的交接过程，
                             section 从"链接器按什么单位合并"里被逼出来
@@ -226,7 +226,7 @@
             停掉后回读红 100 / 白 614300；不插显示器截屏转 PNG；
             读显存比写显存慢 10 倍（47 vs 481 MiB/s）
             视频 4_5-1（14 分钟）已融合，PDF 两处错误已标出
-            测量探针 8 个在 labs/03_framebuffer/probe/
+            测量探针 8 个在 knowledge/labs/05_framebuffer/probe/
             插 HDMI 后实测：sii902x 把模式从 1024x600x32 改成 1280x720x16 60Hz，
             彩条回读八种颜色计数与推算值逐项相等，显示器上颜色顺序和四边白框肉眼确认无误；
             拔掉显示器后是否变回 1024x600x32 未测
@@ -252,7 +252,7 @@
             baseline/bbox/advance/26.6 排版、framebuffer alpha 合成与 font 层契约
             教材勘误已就地标出：UTF-16 代理对、ANSI 不是固定编码、line_length/pitch、
             灰度字节不是蓝色、fexec-charset 与 wchar_t 的边界
-            本机自动实验：labs/04_text 24 PASS；基础 11/12 各 13 PASS；
+            本机自动实验：knowledge/labs/06_text 24 PASS；基础 11/12 各 13 PASS；
             FreeType 2.10.2 已真实交叉构建为 ARM EABI5，fbtext 静态 ARM 产物已验 ELF
             2026-09-16 串口真机闭环完成：CH9102/COM8 上传整文件 SHA-256 一致；
             32bpp Ag 的 covered=written=nonblack=2162、bbox=(40,66)..(130,138)、217 色；
@@ -314,6 +314,6 @@
             project/check.sh 三套件:check.sh/check_core.sh/check_font_input.sh/
                      check_gui.sh,TOTAL 124 PASS / 0 FAIL / 0 SKIP(73 -> 124)
     [ ] 阶段 2  驱动开发   PDF 301-495
-        量产工具路线的逐章施工表已全部勾完(notes/03_项目/Todo/
+        量产工具路线的逐章施工表已全部勾完(Engineering/Todo/
         项目路线图-对齐电子产品量产工具.md 第四节);现行终点仍是
         网络视频终端(刀 0 起步)

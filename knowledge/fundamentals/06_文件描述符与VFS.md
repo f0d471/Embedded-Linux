@@ -1,0 +1,976 @@
+# 06 文件描述符与 VFS
+
+## 这一篇到底在讲什么
+
+> **fd 就是内核发给你的号码牌。真东西锁在内核家里，你手上只有一个号，
+> 办事的时候报号，内核凭号去找那个真东西。**
+
+### 你是从哪儿撞见它的
+
+你在板子上想点亮一个 LED，教程让你这么写：
+
+```c
+int fd = open("/sys/class/leds/<灯的名字>/brightness", O_WRONLY);
+write(fd, "1", 1);
+```
+
+（灯具体叫什么名字得上板 `ls /sys/class/leds/` 看，本仓还没验过，别照抄。）
+
+你照做了，灯亮了。心里大概过了两个念头：点个灯为什么要"打开文件"？
+还有，这个 `fd` 拿到的 `3` 到底是个什么东西，为什么不是 `0`？
+
+多数人到这儿就停了：把 `fd` 当成"这个文件的编号"，能拿它 `read`/`write` 就行。
+这个理解能让你写出能跑的代码，但只要一遇到"两个地方写同一个文件互相盖掉"、
+"重定向为什么改了 2 号就全变了"、"`fork` 之后日志错乱"，它就不够用了。
+
+### 为什么非得发个号码牌不可
+
+`open` 之后，内核必须替你记住一堆东西：**你打开的是哪个文件、你读到第几个字节了、
+你是只读还是可写、是不是每次都要追加到末尾。**
+
+这些东西**只能放在内核那边**。假如"读到第几个字节"这个值放在你的进程里、
+由你随便改，那你就能把它改到任意位置去读别人的数据，权限检查全部作废。
+
+可矛盾来了：东西在内核家里，你的程序却必须有办法指着其中一个说"我要操作那个"。
+你不能把内核里的内存地址交给用户程序（那等于把钥匙给你）。
+
+**于是就有了号码牌这个办法**：真东西留在内核，只发给你一个小整数。
+你每次办事都把号报上来，内核在自己那张表里一查就知道你说的是哪个。
+这就是 `open` 返回 `3` 的全部含义——**它不是"文件的编号"，
+是"你这个进程的表里第 3 格"**。换个进程，同样的 3 号是完全不相干的另一个东西。
+
+这一个设计推出了本篇几乎所有结论。最重要的一条：
+**号码牌只是个号，状态记在柜台后面那个真东西上。**
+所以只要两张号码牌指向同一个真东西，它们就共享读写位置——
+本篇后面所有"谁和谁会互相影响"的问题，问的都是同一件事：
+**这两个 fd，指没指向同一个？**
+
+### 柜台后面长什么样
+
+内核那边其实分了三层，不是一层：
+
+一次 `open` 之后，要分清三层：
+
+| 层 | 归谁所有 | 存什么 | 关键点 |
+|---|---|---|---|
+| 进程的 fd 表 | 每个进程一张 | `0`、`1`、`2`、`3` 等下标，以及指向 `struct file` 的指针 | fd 只是进程私有的号码牌 |
+| 打开文件描述 `struct file` | 每次 `open` 通常新建一个 | 当前读写位置 `pos`、`O_APPEND` 等状态 | 状态在这里，不在 fd 数字上 |
+| 对象及操作实现 | 文件系统或设备驱动 | 普通文件、管道、终端、LED 等对象，以及各自的 `read/write/lseek` | VFS 用统一接口转给不同实现 |
+
+`fd 0/1/2` 可以同时指向同一个终端对象，`fd 3` 也可以指向另一次 `open` 产生的独立 `struct file`。
+
+    分别 open 两次      两个描述    各读各的，位置互不影响
+    dup / dup2         一个描述    位置共享，一个写了另一个跟着动
+    fork 继承          一个描述    父子各有一张 fd 表，但表项指到同一处
+
+**为什么中间那层非有不可**：如果 `pos` 直接记在 fd 表里，`dup` 出来的两个 fd 就
+各有一份 `pos`，shell 的 `>>` 追加重定向立刻就会互相覆盖。第三节会实测这一点。
+
+最后一层是 VFS。柜台后面那个"文件"可以是磁盘文件、管道、终端，也可以是那个 LED。
+内核让它们全都长得像文件、全都认 `read`/`write`，你就只用学一套接口去操作所有东西
+——**这才是"一切皆文件"这句话的实际含义，而 VFS 就是让它成立的那层转接**。
+代价是同一句 `read(fd, buf, 100)`，换个 fd 就是另一种下场。
+
+## 结论先贴出来
+
+下面每条都是能直接背走的答案，看不懂推导也不影响用。条数按本篇实际有几个独立
+结论来定，不凑数：正文每一节至少对应下面一条，没对上就是漏了。
+
+1. **fd 是非负整数下标，不是指针。** `open` 成功返回当前最小的空闲下标，失败返回
+   `-1`。**所以判断成败只能写 `fd < 0`**，写 `!fd` 或 `fd <= 0` 会把合法的 0 号误判成失败。
+2. **第一个 fd 是 3，因为 0/1/2 已经被 shell 占走了。** 标准输入、标准输出、标准错误
+   不是语言特性，就是三个普通下标，谁都能改。
+3. **一次 `open` 造一个描述，位置记在描述上。** 同一个文件 `open` 两次是两个描述，
+   两套位置。文件名相同不代表共享任何东西。
+4. **`dup` / `dup2` 复制的是下标，不是描述。** 新老下标指向同一个描述，因此共享位置
+   和 `O_APPEND` 这类状态。关掉其中一个，描述还有人用，另一个照常能写。
+5. **`dup2(oldfd, newfd)` 的方向是"旧的在前，要被改掉的在后"。** `dup2(logfd, 2)`
+   把 2 号槽改指到日志文件，之后所有走 stderr 的输出都落进日志——**代码一行不用改**。
+   shell 的 `2>err.log` 就是这么实现的。
+6. **`fork` 之后父子各有一张 fd 表，但表项指向同一批描述。** 所以位置是共享的
+   （一方写了，另一方接着往后写），而关闭 fd 是各关各的。
+7. **`O_APPEND` 的原子性生效在描述这一层，由内核保证。** 它把"定位到末尾"和"写"
+   并成一个不可打断的动作，所以多进程同时追加不会互相覆盖。
+   **拆成 `lseek` 到末尾再 `write` 就没有这个保证了。** 但它只保护单次 `write`，
+   不保护由多次 `write` 拼出来的一条完整业务记录。
+   （跨 NFS 等网络文件系统另有限制，见 [open(2)](https://man7.org/linux/man-pages/man2/open.2.html)。）
+8. **VFS 是内核给所有"文件样"的东西套的统一接口。** 正因为有它，`read` 才能同时
+   对付磁盘文件、管道、终端和设备。**代价是不能假定每个 fd 都支持全部操作**：
+   管道不能 `lseek`，很多设备不能 `mmap`。
+9. **`read` 返回的是"实际读到多少"，不是"我要多少"。** 磁盘文件读到末尾返回 0，
+   管道会阻塞，终端通常按行给你。**永远用返回值，别用你传进去的那个长度。**
+10. **想看一个 fd 现在是什么状态，不用猜，进程可以自己读 `/proc/self/fdinfo/<fd>`。**
+    里面直接写着 `pos` 和 `flags`。
+
+### 看到什么，就先想到什么
+
+| 看到的东西 | 第一反应 |
+|---|---|
+| 判断 `open` 成败 | 只能 `fd < 0`；0 是合法 fd |
+| 两个 fd 的位置一起动 | 它们指向同一个描述：来自 `dup`/`dup2` 或 `fork` 继承。别看文件名 |
+| 关掉一个 fd，另一个还能写 | 关的是自己的下标；描述还有人引用就不会消失 |
+| 多进程往同一个文件追加日志 | 用 `O_APPEND`，别用 `lseek` + `write` |
+| `lseek` 报不支持 | 这个 fd 后面挂的不是普通文件，多半是管道或某种设备 |
+| `read` 只返回了一部分 | 正常，不是错误；循环读到返回 0 为止 |
+
+想补原理时：fd 是什么看第一、二节，三张表看第三节，重定向看第四节，
+`fork` 看第五节，`O_APPEND` 看第六节，VFS 看第七节。
+
+---
+
+**前置：[05 系统调用与用户内核态](05_系统调用与用户内核态.md)。**
+那一篇讲 `read` 怎么进内核，本篇讲进去之后内核查的是哪张表。
+没读也能读本篇，只要接受一件事：`open`/`read`/`write` 是**系统调用**，
+执行它们的时候 CPU 会切到内核，由内核代你干活。
+
+被 02 章 2、3、6 节用到。
+
+实验目录：`knowledge/labs/00_basics/02_fd_and_vfs/`
+所有输出是 2026-09-08 本机实跑，Ubuntu 26.04 on WSL2，内核 6.6.114.1，gcc 15.2.0。
+判据自查：`bash knowledge/labs/00_basics/02_fd_and_vfs/check.sh`
+
+---
+
+## 一、从一个你天天见但没细想的返回值开始
+
+```c
+int fd = open("data.txt", O_RDONLY);
+```
+
+`fd` 拿到的是个 `3`。为什么是 3？为什么不是一个指针？
+
+**先把问题问准：**内核那边显然要为这次打开记一堆东西 ——
+文件在磁盘哪、读到第几个字节了、以只读还是读写方式打开的。
+这些必然存在某个内核数据结构里。
+
+那为什么不直接把那个结构的地址返回给你，让你 `read(ptr, ...)`？
+这样内核还省一次查表。
+
+**因为交出去就收不回了。** 用户态拿到一个内核地址，就可以：
+
+    随便改它（写坏内核数据结构，整个系统崩）
+    伪造一个（传个假地址进来，让内核去访问不该访问的内存）
+    偷看它旁边的内存（内核里挨着放的可能是别的进程的数据）
+
+内核没有任何办法验证"你传进来的这个指针是不是我给你的那个"。
+
+**换成下标就全解决了：**
+
+    fd = 3 传进来，内核检查 0 <= 3 < 表的长度，越界就返回 EBADF
+    表是内核自己的，用户改不了
+    每个进程一张表，你的 3 和我的 3 互不相干
+
+> **文件描述符（file descriptor，fd）**：进程内一张数组的下标。
+> 数组的每一格指向内核里描述"一次打开"的结构。
+> `open` 返回下标，`read`/`write`/`close` 拿下标回来查。
+
+这不是什么特殊设计，是**内核向用户态交出资源的通用做法** ——
+凡是"内核里有个东西、用户要反复引用它"的场合，给的都是个号码而不是地址。
+
+### 1.1 那为什么第一个 fd 是 3，不是 0
+
+因为 0、1、2 已经被占了。
+
+    fd 0   标准输入   stdin
+    fd 1   标准输出   stdout
+    fd 2   标准错误   stderr
+
+**这三个不是 C 语言规定的，是习惯**：shell 在启动你的程序之前，
+已经把这三格填好了（通常都指向终端）。你的程序一上来就有三格是满的，
+所以 `open` 只能从 3 开始发。
+
+`printf` 往 1 号写、`fprintf(stderr,...)` 往 2 号写 —— 就这么简单。
+第四节会利用这一点做件很有用的事。
+
+---
+
+## 二、实验 1：证明 fd 是下标，且中间还有一层
+
+### 2.1 先自己想
+
+要证明"fd 只是下标、真正的状态在别处"，最直接的办法是：
+**让两个不同的 fd 指向同一个文件，然后动其中一个，看另一个跟不跟着动。**
+
+有两种造法，结果应该不一样：
+
+    open 同一个文件两次        -> 两次打开，各自记各自的进度？
+    dup(fd) 复制一个 fd        -> 复制的是下标还是背后的东西？
+
+怎么看"进度"？`/proc` 里内核把每个 fd 的内部状态直接开出来了：
+
+    /proc/<pid>/fd/<n>       这一格指向哪个文件（是个符号链接）
+    /proc/<pid>/fdinfo/<n>   这一格背后的状态：pos（读到哪了）、flags（打开方式）
+
+    提示：<pid> 写成 self 就是"当前进程自己"，
+          所以程序可以读 /proc/self/fdinfo/3 看自己的状态，不用另开终端。
+
+**上一版笔记让你另开一个终端 `cat /proc/<pid>/fdinfo`，还要先 `pause()` 挂住进程 ——
+那样很难做下去。改成程序自己读自己。**
+
+### 2.2 动手：完整代码
+
+`knowledge/labs/00_basics/02_fd_and_vfs/fdshow.c`：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+
+/* 把 /proc/self/fdinfo/<fd> 里的 pos 和 flags 打出来 */
+static void show(int fd, const char *tag)
+{
+	char path[64], line[128];
+	FILE *f;
+
+	snprintf(path, sizeof path, "/proc/self/fdinfo/%d", fd);
+	f = fopen(path, "r");
+	if (!f) { printf("  fd %d (%s): 打不开 %s\n", fd, tag, path); return; }
+
+	printf("  fd %-2d (%-10s)", fd, tag);
+	while (fgets(line, sizeof line, f)) {
+		line[strcspn(line, "\n")] = 0;          /* 去掉行尾换行 */
+		if (!strncmp(line, "pos:", 4) || !strncmp(line, "flags:", 6))
+			printf("  %s", line);
+	}
+	printf("\n");
+	fclose(f);
+}
+
+int main(void)
+{
+	int fd1, fd2, fd3;
+	char c;
+
+	fd1 = open("data.txt", O_RDONLY);
+	fd2 = open("data.txt", O_RDONLY);   /* 同一个文件，第二次 open */
+	fd3 = dup(fd1);                     /* 复制 fd1 这一格 */
+
+	printf("open 返回的编号: fd1=%d fd2=%d fd3=%d\n\n", fd1, fd2, fd3);
+
+	printf("[读之前] 三个 fd 的位置：\n");
+	show(fd1, "open 1"); show(fd2, "open 2"); show(fd3, "dup fd1");
+
+	read(fd1, &c, 1);                   /* 只从 fd1 读一个字节 */
+	printf("\n从 fd1 读了 1 个字节（读到 '%c'）\n\n", c);
+
+	printf("[读之后] 三个 fd 的位置：\n");
+	show(fd1, "open 1"); show(fd2, "open 2"); show(fd3, "dup fd1");
+
+	return 0;
+}
+```
+
+编译运行：
+
+    cd knowledge/labs/00_basics/02_fd_and_vfs
+    printf 'abcdefghij' > data.txt      # 造一个 10 字节的文件
+    gcc fdshow.c -o fdshow
+    ./fdshow
+
+### 2.3 本机实测
+
+```
+open 返回的编号: fd1=3 fd2=4 fd3=5
+
+[读之前] 三个 fd 的位置：
+  fd 3  (open 1    )  pos:	0  flags:	0100000
+  fd 4  (open 2    )  pos:	0  flags:	0100000
+  fd 5  (dup fd1   )  pos:	0  flags:	0100000
+
+从 fd1 读了 1 个字节（读到 'a'）
+
+[读之后] 三个 fd 的位置：
+  fd 3  (open 1    )  pos:	1  flags:	0100000
+  fd 4  (open 2    )  pos:	0  flags:	0100000
+  fd 5  (dup fd1   )  pos:	1  flags:	0100000
+```
+
+### 2.4 逐条读，三个结论
+
+**结论 1：编号是 3、4、5，连着发的。** 印证 1.1 节 —— 0/1/2 被占了，
+而且内核发号的规则是"给最小的空闲格"。
+
+**结论 2（关键）：读之后 pos 是 `1 / 0 / 1`。**
+
+    fd3（第一次 open）  pos 0 -> 1     我读的就是它，动了
+    fd4（第二次 open）  pos 0 -> 0     没动
+    fd5（dup 来的）     pos 0 -> 1     我没碰它，但它跟着动了
+
+**fd5 跟着动，说明 fd5 和 fd3 背后是同一个东西。**
+而 fd4 不动，说明它背后是另一个东西。
+
+三个 fd 指向同一个文件，却分成了两组。**"位置"这个状态既不在 fd 里
+（否则 dup 出来的 fd5 该独立），也不在文件里（否则 fd4 该跟着动）。
+它在中间某一层。**
+
+**结论 3：flags 都是 `0100000`。** 这是八进制，转成十六进制是 `0x8000`，
+正是 `O_LARGEFILE`。`O_RDONLY` 的值恰好是 0，所以看不见它。
+这一列后面第六节还会用到。
+
+### 2.5 判据
+
+    [ ] fd1/fd2/fd3 是 3/4/5 三个连号
+    [ ] 读之前三个 pos 全是 0
+    [ ] 读之后 pos 分别是 1 / 0 / 1
+    [ ] 能说出哪两个 fd 是一组，依据是什么
+
+    注错见红：把 fd3 = dup(fd1) 改成 fd3 = open("data.txt", O_RDONLY)。
+    本机实测这时 pos 变成 1 / 0 / 0 —— dup 那一组消失了。
+    如果改完还是 1/0/1，说明你跑的是旧的可执行文件。
+
+---
+
+## 三、三张表：把上面的现象画出来
+
+第二节测出"中间还有一层"。现在把完整结构摆出来。
+**内核用三层结构来管这件事**，第二节的现象是这个结构的直接后果。
+
+三张表的关系可以直接写成引用关系：
+
+| 第一层：进程 A 的 fd 表 | 指向第二层：打开文件描述 | 再指向第三层：文件对象 |
+|---|---|---|
+| `fd[3]` | `struct file A`：`f_pos=1`、`f_flags`、`f_op` | `struct inode`：大小、权限、时间戳、数据块位置 |
+| `fd[5]` | 同一个 `struct file A`，所以和 `fd[3]` 共享位置 | 同一个 `struct inode` |
+| `fd[4]` | 另一个 `struct file B`：`f_pos=0`；因为是另一次 `open`，位置独立 | 仍可指向同一个 `struct inode` |
+
+`task_struct → files_struct → fd[]` 是第一层入口；fd 表每格存的是指针，不是文件内容。
+
+**第二节的三个 pos 值，现在能一眼解释：**
+
+    fd[3] 和 fd[5] 指向同一个 struct file  -> 共享 f_pos -> 一起变成 1
+    fd[4] 指向另一个 struct file           -> 独立 f_pos -> 还是 0
+    但两个 struct file 的 f_inode 指向同一个 inode -> 确实是同一个文件
+
+### 3.1 为什么中间那张表非有不可
+
+假设去掉中间层，把 `f_pos` 直接塞进 `inode`（也就是"每个文件一个位置"）：
+
+    进程 A 打开 1.txt 读了 100 字节，位置 = 100
+    进程 B 也打开 1.txt，想从头读 —— 但位置已经是 100 了
+
+两个毫不相干的程序会互相干扰。显然不对。
+
+**根本原因是一句话：**
+
+    "读到哪了"是**这一次打开**的属性，不是**这个文件**的属性。
+
+一个属性该放在哪张表，就看它是"每次打开都不同"还是"文件本身就一份"：
+
+    每次打开都不同 -> struct file   f_pos、打开方式（只读还是读写）、O_APPEND
+    文件本身一份   -> inode         大小、权限、修改时间、数据在磁盘哪里
+
+### 3.2 三种"复制"，复制的是不同层
+
+三张表结构决定了三种操作的语义完全不同。这是本篇最实用的一张表：
+
+| 操作 | fd 表发生什么 | `struct file` | 读写位置 |
+|---|---|---|---|
+| 对同一文件 `open` 两次 | 增加两格 | 各指向新建的一份；最终可共享同一 inode | 两个 `f_pos` 互不影响 |
+| `dup / dup2` | 增加一格 | 新旧 fd 指向同一份 | 共享同一个 `f_pos` |
+| `fork` | 子进程复制整张 fd 表 | 父子各格仍指向原来的同一份 | 跨进程共享 `f_pos` |
+
+第五节会把 fork 那条也测出来。
+
+---
+
+## 四、实验 2：不改日志语句，让输出从终端改写到文件
+
+### 4.1 先自己想
+
+现在有个实际问题：程序里到处是 `fprintf(stderr, ...)`，
+还有别人写的库也往 stderr 写。**现在想把所有这些输出落到一个文件里，
+但不许改任何一行 `fprintf`。** 怎么办？
+
+`stderr` 叫“标准错误输出”。程序刚启动时，它通常通向终端，所以
+`fprintf(stderr, ...)` 的文字会显示在屏幕上。Linux 同时给它分配了编号 2，
+`STDERR_FILENO` 就是这个编号的常量名。
+
+想让所有现有日志进入文件，只需要统一改变 `stderr` 的去向。写日志的代码仍然写
+`stderr`，不会知道后面接的是终端还是文件。
+
+    提示：完成这件事的函数叫 dup2(来源, 要改变的目标)。
+          来源是已经打开的日志文件，目标是 stderr。
+          写成 dup2(fd, STDERR_FILENO)。
+
+### 4.2 动手
+
+`logredir.c`：
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+static void worker(void)          /* 假装这是别人写的库，只认 stderr */
+{
+	fprintf(stderr, "worker: 干活中\n");
+}
+
+int main(void)
+{
+	int fd;
+
+	fprintf(stderr, "1. 重定向之前，这行去终端\n");
+	worker();
+
+	fd = open("log.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	printf("2. 日志文件拿到的 fd = %d\n", fd);
+
+	dup2(fd, STDERR_FILENO);      /* 让 stderr 以后写进 log.txt */
+	close(fd);                    /* fd 已经多余；关掉它不影响 stderr */
+
+	fprintf(stderr, "3. 重定向之后，这行去文件\n");
+	worker();                     /* 同一个函数，一个字没改 */
+
+	return 0;
+}
+```
+
+    gcc logredir.c -o logredir
+    ./logredir
+    cat log.txt
+
+### 4.3 本机实测
+
+```
+$ ./logredir
+1. 重定向之前，这行去终端
+worker: 干活中
+2. 日志文件拿到的 fd = 3
+
+$ cat log.txt
+3. 重定向之后，这行去文件
+worker: 干活中
+```
+
+### 4.4 逐条读
+
+**现象：`worker()` 被调了两次，代码一模一样，第一次去终端、第二次进文件。**
+
+    dup2 之前   fprintf(stderr, ...) -> stderr -> 终端
+    dup2 之后   fprintf(stderr, ...) -> stderr -> log.txt
+
+`fprintf(stderr, ...)` 全程只把文字交给 `stderr`。
+**它不知道 `stderr` 后面接的目标已经换了。**
+
+**再看那句 `close(fd)`，它是本实验最容易被误解的一行。**
+
+`dup2` 成功后，`fd` 和 `stderr` 都可以通往同一个日志文件。
+后续日志只走 `stderr`，`fd` 已经没有用途，所以可以关闭这个多余入口。
+
+    close(fd) 之前：fd 和 stderr 都能通往 log.txt
+    close(fd) 之后：只剩 stderr 通往 log.txt，日志仍能继续写
+
+这也是为什么 `dup2` 之后紧跟 `close(fd)`：不保留没有用途的文件编号。
+想知道 Linux 内部为什么允许两条入口同时存在，再回看第三节的三张表。
+
+### 4.5 这就是 shell 重定向的实现
+
+你敲的 `./prog > out.txt 2>&1`，shell 干的正是这件事：
+
+    fork 出子进程
+    在子进程里 open("out.txt")，让标准输出改写到这个文件
+    2>&1 表示让标准错误也使用标准输出当前的去向
+    然后 execve 你的程序
+
+数字 1 代表标准输出，数字 2 代表标准错误。`2>&1` 不是“把文字 2 写进文件”，
+而是让标准错误跟随标准输出的去向。两路最终通过同一次文件打开结果写入，
+因此共用当前写到的位置；如果各自独立打开同一文件，位置可能互相干扰。
+
+`project/` 里的 `log_redirect()` 用的就是这一招，见
+[02 章文件 IO](../tutorials/01_应用编程/04_文件IO.md) 第 6 节。
+
+### 4.6 判据
+
+    [ ] 前两行出现在终端，后两行出现在 log.txt 里
+    [ ] worker() 的代码一个字没改，但两次输出去了不同地方
+    [ ] open 拿到的 fd 是 3
+    [ ] close(fd) 之后，往 stderr 写仍然有效
+
+    注错见红：把 dup2(fd, STDERR_FILENO) 改成 dup2(fd, STDOUT_FILENO)。
+    这时改变的是 stdout（标准输出）的去向，本机实测结果反过来：
+    "2. 日志文件拿到的 fd = 3" 这行 printf **进了文件**，
+    而两行 stderr 全部留在终端。
+    改错目标，输出就去错地方 —— 这条直接证明两种标准输出各有自己的去向。
+
+---
+
+## 五、实验 3：fork 之后，父子共享的是哪一层
+
+### 5.1 先自己想
+
+3.2 节说 `fork` 复制整张 fd 表，但指向的还是同一批 `struct file`。
+如果这是真的，那么：
+
+**父进程写一段、子进程写一段，两段不会互相覆盖** —— 因为它们共享 `f_pos`，
+子进程写完位置前进了，父进程接着往后写。
+
+反过来，如果 fork 给子进程建了新的 `struct file`（各自独立的 `f_pos`），
+子进程会从父进程 fork 那一刻的位置重新开始写，**盖掉一部分内容**。
+
+这两种结果在文件内容上完全不同，一眼能分辨。
+
+### 5.2 动手
+
+`forkfd.c`：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+
+int main(void)
+{
+	int fd = open("shared.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	pid_t pid;
+
+	write(fd, "AAAAA", 5);        /* fork 前先写 5 字节，f_pos = 5 */
+
+	pid = fork();
+	if (pid == 0) {
+		write(fd, "child", 5);    /* 子进程写 */
+		exit(0);
+	}
+	wait(NULL);                   /* 等子进程写完，避免两边同时写 */
+	write(fd, "PAREN", 5);        /* 父进程再写 */
+	close(fd);
+
+	printf("文件内容: ");
+	fflush(stdout);
+	execlp("cat", "cat", "shared.txt", NULL);
+	return 0;
+}
+```
+
+    gcc forkfd.c -o forkfd
+    ./forkfd
+
+### 5.3 本机实测
+
+```
+文件内容: AAAAAchildPAREN
+```
+
+### 5.4 逐条读
+
+15 个字节，三段完整，谁也没盖谁：
+
+    AAAAA        fork 之前写的，位置到 5
+    child        子进程写的，从 5 开始，位置到 10
+    PAREN        父进程写的，从 10 开始 —— 父进程知道子进程写过了
+
+**父进程从来没执行过任何"把位置挪到 10"的代码。**
+它能从 10 开始写，只可能是因为它和子进程用的是同一个 `f_pos`。
+
+**不共享会是什么样？**下一小节的注错见红把它测出来了：让子进程自己
+`open` 一次（拿到一个独立的 `struct file`，`f_pos` 从 0 开始），
+本机实测结果是 `childPAREN`，10 字节 ——
+子进程从 0 写，把 `AAAAA` 盖掉了；父进程的位置仍是 5，接着写 `PAREN`。
+
+    共享 f_pos（fork 继承）    AAAAAchildPAREN   15 字节，谁也没盖谁
+    不共享（各自 open）        childPAREN        10 字节，开头被盖掉
+
+结果是 15 字节的那个。3.2 节那张图的第三行验证完毕。
+
+**这条在实际工程里的意义**：父子进程往同一个日志文件写，
+只要是 fork 前打开的 fd，就不会互相覆盖。
+但如果是 fork 后各自 `open`（两个独立 `struct file`），就会打架 ——
+那时要靠第六节的 `O_APPEND`。
+
+### 5.5 判据
+
+    [ ] 文件内容是 AAAAAchildPAREN，共 15 字节
+    [ ] 能说清三段各自从哪个位置开始写的（0 / 5 / 10）
+
+    注错见红：让子进程自己 open 一次，不用继承来的那个 fd：
+
+        if (fork() == 0) {
+            int f2 = open("shared.txt", O_WRONLY);   /* 不要带 O_TRUNC */
+            write(f2, "child", 5);
+            exit(0);
+        }
+
+    本机实测内容变成 childPAREN，10 字节。
+    子进程那个新 struct file 的 f_pos 从 0 开始，把 AAAAA 盖掉了；
+    父进程的 f_pos 仍是 5，所以 PAREN 还是落在第 5 字节处。
+    **少了 5 个字节，而且没有任何报错。**
+
+---
+
+## 六、实验 4：O_APPEND 的原子性在哪一层生效
+
+### 6.1 先自己想
+
+两个进程同时往一个日志文件追加，怎么保证不互相覆盖？
+
+**朴素做法**：先跳到末尾，再写。
+
+```c
+lseek(fd, 0, SEEK_END);      /* 第 1 次系统调用：找末尾 */
+write(fd, line, n);          /* 第 2 次系统调用：写 */
+```
+
+**看出问题了吗？** 这是两次独立的系统调用。两次之间，内核可能把 CPU 交给别人。
+如果另一个进程在这个缝隙里也写了一条，**你手里那个"末尾"就过期了**，
+你会写到别人刚写的位置上，把它盖掉。
+
+`O_APPEND` 的做法是把这两步合成一步，在内核里、拿着锁做完：
+
+```
+    拿到 inode 的锁
+      f_pos = 文件当前大小       <-- 这两步在锁里面，中间插不进别人
+      写数据
+    放锁
+```
+
+**关键：`O_APPEND` 是 `struct file` 的 `f_flags` 里的一位**（第 2 张表），
+所以它是"这一次打开"的属性 —— 同一个文件，你用 `O_APPEND` 打开，
+我不用，互不影响。
+
+这个差别能量出来吗？能，而且非常明显。
+
+### 6.2 动手
+
+`append.c`（两种模式用命令行参数切换）：
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <string.h>
+#include <sys/wait.h>
+
+#define N     2000                    /* 每个进程写多少条 */
+#define LINE  "0123456789abcdef\n"    /* 每条 17 字节 */
+
+static void writer(int use_append)
+{
+	int fd, i;
+	int flags = O_WRONLY | (use_append ? O_APPEND : 0);
+
+	fd = open("out.txt", flags);
+	for (i = 0; i < N; i++) {
+		if (!use_append)
+			lseek(fd, 0, SEEK_END);        /* 自己找末尾：第 1 次系统调用 */
+		write(fd, LINE, strlen(LINE));     /* 写：第 2 次 */
+	}
+	close(fd);
+}
+
+int main(int argc, char **argv)
+{
+	int use_append = (argc > 1 && !strcmp(argv[1], "append"));
+	int fd;
+
+	fd = open("out.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	close(fd);
+
+	if (fork() == 0) { writer(use_append); exit(0); }   /* 子进程写 2000 条 */
+	writer(use_append);                                  /* 父进程写 2000 条 */
+	wait(NULL);
+
+	printf("%-8s 模式：期望 %d 字节，实际 %ld 字节\n",
+	       use_append ? "append" : "lseek",
+	       2 * N * (int)strlen(LINE),
+	       (long)lseek(open("out.txt", O_RDONLY), 0, SEEK_END));
+	return 0;
+}
+```
+
+    gcc append.c -o append
+    for i in 1 2 3; do ./append append; done
+    for i in 1 2 3; do ./append lseek;  done
+
+**为什么要各跑三轮？** 因为这是竞态，单次结果可能碰巧正确。
+竞态问题的判据必须是多轮的。
+
+### 6.3 本机实测
+
+```
+append   模式：期望 68000 字节，实际 68000 字节
+append   模式：期望 68000 字节，实际 68000 字节
+append   模式：期望 68000 字节，实际 68000 字节
+lseek    模式：期望 68000 字节，实际 34255 字节
+lseek    模式：期望 68000 字节，实际 34204 字节
+lseek    模式：期望 68000 字节，实际 34340 字节
+```
+
+### 6.4 逐条读
+
+**`O_APPEND` 版：三轮全部精确 68000 字节，一字节不差。**
+（2 个进程 x 2000 条 x 17 字节 = 68000）
+
+**`lseek` 版：34255 / 34204 / 34340 —— 三轮三个数，而且都只有一半左右。**
+
+丢了将近一半，因为两个进程有一多半时间在互相覆盖。
+**更要命的是每轮的数字都不一样**：这是竞态的典型特征，
+它意味着这种 bug **不能靠"我跑了一遍没问题"来排除**。
+
+**注意这个错误的形态：**没有任何一次 `write` 返回失败，
+没有任何报错，程序退出码是 0。数据就是悄无声息地少了一半。
+**并发写文件不用 O_APPEND，就是这种"全绿但结果错"的 bug。**
+
+### 6.5 判据
+
+    [ ] append 模式连跑三轮，三次都精确等于 68000
+    [ ] lseek 模式连跑三轮，三次结果互不相同，且都明显小于 68000
+    [ ] 能说出 lseek 版丢数据的那个"缝隙"具体在哪两行代码之间
+
+    注错见红：把 N 改成 5（每个进程只写 5 条）。
+    这时 lseek 版很可能也是满的 —— 竞态窗口太小，撞不上。
+    **这条本身就是教训：并发 bug 的判据必须把压力加到足够大，
+    否则判据会假绿。** 改完记得改回 2000。
+
+---
+
+## 七、VFS：同一个 read，四种下场
+
+前六节讲的是"fd 怎么找到那个文件"。这一节讲进去之后的分岔。
+
+### 7.1 先自己想
+
+Linux 号称"一切皆文件"：`/dev/null`、终端、磁盘文件，全都用
+`open`/`read`/`write` 操作。
+
+但它们的行为显然不可能一样 —— 写进 `/dev/null` 的数据会消失，
+写进磁盘文件的会留下。**同一个 `write` 系统调用，怎么会有不同的下场？**
+
+回头看第三节那张图，`struct file` 里有个字段还没讲：
+
+    f_op   ------+   <-- 该调谁的 read/write
+
+> **`f_op`（file_operations）**：一张函数指针表。
+> 里面是 `read`、`write`、`mmap`、`ioctl` 等一组函数指针。
+> **`open` 的时候，内核看你打开的是什么东西，往 `f_op` 里填不同的表。**
+
+```c
+struct file_operations {
+	ssize_t (*read)  (struct file *, char __user *, size_t, loff_t *);
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+	int     (*mmap)  (struct file *, struct vm_area_struct *);
+	long    (*unlocked_ioctl)(struct file *, unsigned int, unsigned long);
+	...
+};
+```
+
+`sys_read` 的核心只有一句：`f_op->read(...)`。**分岔就在这一个指针上。**
+
+用户态的 `read(fd, buf, n)` 进入内核后，先走统一入口 `sys_read → file->f_op->read()`；随后由 `f_op` 决定真正实现：
+
+| 对象 | `f_op` 来自谁 | `read` 的实际行为 | 最终对象 |
+|---|---|---|---|
+| 普通文件 | ext4 等文件系统 | 定位数据块并读取 | 块设备驱动 → 磁盘 |
+| `/dev/null` | null 驱动 | 直接返回 0，也就是永远 EOF | 不访问硬件 |
+| `/dev/tty` | tty 驱动 | 等待键盘或串口输入 | 串口/终端硬件 |
+
+**这就是"一切皆文件"的实现方式。它不是口号，是一个函数指针的替换。**
+
+怎么验证？**写一段代码，只换路径，其余一个字不改。**
+
+### 7.2 动手
+
+`vfs.c`（完整代码在实验目录，这里是核心部分）：
+
+```c
+static void try_path(const char *path)
+{
+	char buf[8];
+	int fd, n;
+	struct stat st;
+	struct winsize ws;
+
+	fd = open(path, O_RDWR);
+	if (fd < 0) { printf("  open 失败: %s\n\n", strerror(errno)); return; }
+
+	fstat(fd, &st);                       /* 先问问这是什么类型 */
+	...
+
+	n = write(fd, "hello", 5);            /* 完全相同的 write */
+	printf("  write 5 字节 -> 返回 %d\n", n);
+
+	if (isatty(fd)) {                     /* 终端的 read 会一直等键盘，跳过 */
+		printf("  read      -> 跳过\n");
+	} else {
+		lseek(fd, 0, SEEK_SET);
+		memset(buf, '.', sizeof buf);
+		n = read(fd, buf, 5);             /* 完全相同的 read */
+		printf("  read  5 字节 -> 返回 %d, 内容 \"%.5s\"\n", n, buf);
+	}
+
+	/* 问一个只有终端才懂的问题：你的窗口多大 */
+	if (ioctl(fd, TIOCGWINSZ, &ws) == 0)
+		printf("  ioctl(TIOCGWINSZ) -> 成功，%d 行 %d 列\n", ws.ws_row, ws.ws_col);
+	else
+		printf("  ioctl(TIOCGWINSZ) -> 失败: %s\n", strerror(errno));
+
+	close(fd);
+}
+
+int main(void)
+{
+	try_path("data.txt");
+	try_path("/dev/null");
+	try_path("/dev/zero");
+	try_path("/dev/tty");
+	return 0;
+}
+```
+
+    gcc vfs.c -o vfs
+    ./vfs
+
+### 7.3 本机实测
+
+```
+--- data.txt ---
+  类型      : 普通文件
+  write 5 字节 -> 返回 5
+  read  5 字节 -> 返回 5, 内容 "hello"
+  ioctl(TIOCGWINSZ) -> 失败: Inappropriate ioctl for device
+
+--- /dev/null ---
+  类型      : 字符设备
+  write 5 字节 -> 返回 5
+  read  5 字节 -> 返回 0, 内容 "....."
+  ioctl(TIOCGWINSZ) -> 失败: Inappropriate ioctl for device
+
+--- /dev/zero ---
+  类型      : 字符设备
+  write 5 字节 -> 返回 5
+  read  5 字节 -> 返回 5, 内容 ""
+  ioctl(TIOCGWINSZ) -> 失败: Inappropriate ioctl for device
+
+--- /dev/tty ---
+  类型      : 字符设备
+  write 5 字节 -> 返回 5
+  read      -> 跳过（终端会一直等你敲键盘）
+  ioctl(TIOCGWINSZ) -> 成功，30 行 120 列
+```
+
+### 7.4 逐条读，四种下场
+
+**同一段 `write(fd,"hello",5)`，四次都返回 5（都"成功"了），但发生的事完全不同：**
+
+    data.txt    数据落到磁盘，随后 read 把 "hello" 读了回来
+    /dev/null   返回 5，但数据被丢弃。随后 read 返回 0（永远是 EOF）
+    /dev/zero   返回 5，数据也被丢弃
+    /dev/tty    "hello" 直接显示在你的终端上
+
+**再看 read 的三种结果，一个比一个说明问题：**
+
+    data.txt    返回 5，内容 "hello"      -> 真的存了，真的读回来了
+    /dev/null   返回 0，内容还是 "....."  -> 返回 0 表示 EOF，
+                                            buf 一个字节都没被改
+    /dev/zero   返回 5，内容显示为空       -> 读到了 5 个 '\0'。
+                                            不是"没读到"，是读到了 5 个 0 字节，
+                                            printf 遇到第一个 '\0' 就停了
+
+**`/dev/zero` 那个空字符串最容易误读。** 它返回 5 说明确实读了 5 个字节，
+只是内容全是 `\0`。要看清楚就得打十六进制而不是 `%s`。
+**这也是个通用教训：用 `%s` 打二进制数据会骗你。**
+
+**最后看 ioctl 那一行，这是最干净的证据：**
+
+    data.txt    失败: Inappropriate ioctl for device
+    /dev/null   失败: Inappropriate ioctl for device
+    /dev/zero   失败: Inappropriate ioctl for device
+    /dev/tty    成功，30 行 120 列
+
+`TIOCGWINSZ` 是"告诉我窗口有几行几列"。这个问题只有终端驱动能回答。
+**同一个 `ioctl` 调用，三个路径报"我不懂这个命令"，一个给出了答案。**
+
+报错文字 `Inappropriate ioctl for device`（errno 是 `ENOTTY`）
+字面意思就是"这个设备不适用这个 ioctl" —— 也就是
+**那张 `f_op` 表里没有能处理它的函数**。
+
+### 7.5 这条对第 2 阶段驱动开发意味着什么
+
+**写一个字符设备驱动，核心工作就是填一张 `file_operations` 出来：**
+
+```c
+static const struct file_operations my_fops = {
+	.owner   = THIS_MODULE,
+	.open    = my_open,
+	.read    = my_read,           /* 用户 read 我的设备时，调这里 */
+	.write   = my_write,
+	.unlocked_ioctl = my_ioctl,
+};
+```
+
+填完注册进内核，用户态就能用 `open("/dev/mydev")` + `read` 操作你的硬件了。
+**第七节这四个路径的行为差异，全部来自这张表里填的是不同的函数。**
+
+也是为什么 03 章操作 framebuffer 用 `open("/dev/fb0")` 而不是 `fopen`：
+`/dev/fb0` 的 `f_op` 是显示驱动的表，标准 IO 那层缓冲夹在中间只会碍事
+（见 02 章第 4 节）。
+
+### 7.6 判据
+
+    [ ] 四个路径的 write 全部返回 5
+    [ ] data.txt 的 read 返回 5 且内容是 "hello"
+    [ ] /dev/null 的 read 返回 0，且 buf 保持原样（还是那些点）
+    [ ] /dev/zero 的 read 返回 5，但内容全是 '\0'
+    [ ] 只有 /dev/tty 的 ioctl(TIOCGWINSZ) 成功，另外三个报 ENOTTY
+    [ ] 能说出这四种差异来自 struct file 的哪一个字段
+
+    注错见红：把 /dev/tty 那行改成 /dev/null 跑两遍。
+    本机实测两行输出完全相同，ioctl 都失败 ——
+    路径变了行为就变，路径一样行为就一样。**行为跟着路径走，不跟着代码走。**
+
+---
+
+## 八、顺带一提：和 nanos-lite 的对照
+
+**没写过 nanos-lite 也不影响，跳过即可，本篇不依赖它。**
+
+如果你在 ysyx 里写过 `fs.c`，那套东西和本篇是同一件事的简化版：
+
+```c
+    /* nanos-lite 的形状 */
+    typedef struct {
+      char *name;
+      size_t size;
+      size_t disk_offset;
+      size_t open_offset;      /* 读到哪了 */
+    } Finfo;
+
+    static Finfo file_table[];
+    int fs_open(const char *pathname, int flags, int mode);   /* 返回下标 */
+```
+
+`fd` 是 `file_table` 的下标 —— 和本篇第一节完全一致。
+
+**但有一处关键差异，正是第三节讲的那件事：**
+`open_offset` 在 nanos-lite 里和文件信息放在同一个结构体里（两层结构），
+Linux 把它单独拆到了 `struct file`（三层结构）。
+
+    nanos-lite   fd 表 -> Finfo（位置和文件信息在一起）
+    Linux        fd 表 -> struct file（位置） -> inode（文件信息）
+
+nanos-lite 能这么简化，是因为它是单进程玩具系统，
+不会出现"同一个文件被打开两次"。真跑起来多进程就不行了 ——
+这正是 3.1 节论证的内容。
+
+另一处对照：你在 NPC 里做过特权级，知道 M 态能看见全部物理地址、U 态不能。
+第一节讲的"为什么不返回指针"就是这条边界的直接后果。
+
+---
+
+## 九、被谁用到
+
+| 章节 | 用到什么 |
+|---|---|
+| [04 文件 IO](../tutorials/01_应用编程/04_文件IO.md) 第 2 节 | 三张表、dup2、O_APPEND 原子性 |
+| [04 文件 IO](../tutorials/01_应用编程/04_文件IO.md) 第 6 节 | `project/` 用 dup2 把日志接到文件 |
+| 03 Framebuffer | 为什么 `/dev/fb0` 要用系统调用 IO 而不是标准 IO |
+| 第 2 阶段驱动开发 | 写驱动就是填一张 `file_operations`（7.5 节） |
+
+相关：
+[05 系统调用与用户内核态](05_系统调用与用户内核态.md) 讲 `read` 怎么进内核，
+本篇讲进去之后查的是哪张表；
+[07 虚拟内存与 mmap](07_虚拟内存与mmap.md) 讲 `f_op->mmap` 那一格。
