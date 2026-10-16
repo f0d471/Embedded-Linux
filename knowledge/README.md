@@ -81,8 +81,8 @@ labs 是动手与判据（"做没做对，机器说了算"）。教程正文里�
 - 每个目录的 check.sh 从源码重建一切再逐条核对，末尾打印
   `N PASS / N FAIL / N SKIP`。
 - 判据基线记录在根 README 进度节；判据变化的 commit 同步更新基线。
-- 基线（2026-10-16 迁移复跑）：00_basics 十一套 + 06_text 合计
-  323 PASS / 0 FAIL / 6 SKIP（SKIP = root 项与需显示器的组）。
+- 基线（2026-10-16 复核）：00_basics 十一套 + 06_text 合计
+  323 PASS / 0 FAIL / 5 SKIP（04 篇 1 条缺 x86 32 位头，08 篇 4 条要 root）。
 
 ## 四、改写素材与流程
 

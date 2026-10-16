@@ -80,19 +80,22 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
     [x] 仓库重构（2026-10-16）：四部分骨架、CodeReading 删除、教程化路线立项
         排期与逐章状态见 Engineering/Todo/knowledge教程化路线.md
     [ ] knowledge 教程化
-        [~] 01_HelloWorld / 02_GCC / 03_Makefile（2026-10-16 本轮重写中，
-            完成一篇勾一篇；融合字幕 11 集 + PDF 141-165）
+        [x] 01_HelloWorld背后没那么简单（字幕 4_1×2 + PDF 141-142；3978104）
+        [x] 02_GCC编译器的使用（字幕 4_2×2 + PDF 143-153；e87e848）
+        [x] 03_Makefile的使用（字幕 4_3×7 + PDF 154-165；daea10c）
         [ ] 04_文件IO ～ 06_文字显示（旧体例占位，待重写）
         [ ] 07_输入系统 ～ 11_串口（待写；素材 = PDF + 源码 + TechReports 实测）
-        [~] fundamentals 13 篇讲解篇（311 条判据）；手册篇 2 篇本轮新增
-            （13_GCC常用选项手册 / 14_Makefile语法与函数手册）
+        [x] fundamentals 13 篇讲解篇（311 条判据）+ 2 篇手册篇
+            （13_GCC常用选项手册 / 14_Makefile语法与函数手册，
+             含原书勘误 2 条：gcc -M 落文件、-M 系真实行为）
         [ ] 02_驱动开发（未开工，前置 = BSP 工具链与内核源码）
     [ ] project（现行终点 = 网络视频终端，刀 0 起步）
         量产工具旧路线已走完并归档（TechReports 06-09，判据 73 → 124）
         判据基线：bash project/check.sh → TOTAL 124 PASS / 0 FAIL / 0 SKIP
 
-labs 判据基线（WSL）：knowledge/labs/00_basics 十一套 + 06_text 合计
-323 PASS / 0 FAIL / 6 SKIP（SKIP 为 root 项与需显示器的组）。
+labs 判据基线（WSL，2026-10-16 复核）：knowledge/labs/00_basics 十一套 +
+06_text 合计 323 PASS / 0 FAIL / 5 SKIP（04 篇 1 条：本机缺 x86 32 位头；
+08 篇 4 条：要 root）。
 
 ## 六、文档规则
 
