@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="500" viewBox="0 0 1180 500" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <rect x="0" y="0" width="1180" height="500" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <!-- 应用态容器 -->
+  <rect x="30" y="40" width="640" height="180" fill="#ffffff" stroke="#888888"/>
+  <text x="50" y="66" font-size="14" fill="#555555">应用态（第 1~4 节在练的）</text>
+  <rect x="60" y="90" width="250" height="52" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="185" y="112" font-size="14" text-anchor="middle" fill="#000000">open("/dev/fb0")</text>
+  <text x="185" y="131" font-size="11.5" text-anchor="middle" fill="#666666">主 29 选 fb 核心,次 0 选实例</text>
+  <rect x="60" y="152" width="250" height="52" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="185" y="174" font-size="14" text-anchor="middle" fill="#000000">ioctl 问参数 + mmap 显存</text>
+  <text x="185" y="193" font-size="11.5" text-anchor="middle" fill="#666666">FBIOGET_VSCREENINFO / FSCREENINFO</text>
+
+  <rect x="380" y="105" width="260" height="90" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="510" y="133" font-size="14" text-anchor="middle" fill="#000000">p[offset] = 颜色</text>
+  <text x="510" y="155" font-size="12" text-anchor="middle" fill="#b71c1c">不经过内核,没有系统调用</text>
+  <text x="510" y="175" font-size="11.5" text-anchor="middle" fill="#666666">offset = y*line_length + x*(bpp/8)</text>
+
+  <line x1="310" y1="170" x2="376" y2="155" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 内核态 -->
+  <rect x="30" y="250" width="640" height="90" fill="#ffffff" stroke="#888888"/>
+  <text x="50" y="276" font-size="14" fill="#555555">内核态（fb 核心 + mxsfb 驱动）</text>
+  <rect x="240" y="285" width="230" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="355" y="312" font-size="13.5" text-anchor="middle" fill="#000000">fb 驱动:分配显存、报参数</text>
+  <line x1="185" y1="142" x2="236" y2="295" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="150" y="220" font-size="11.5" fill="#333333">进内核各一次</text>
+
+  <!-- 硬件带 -->
+  <rect x="720" y="120" width="200" height="90" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="820" y="150" font-size="14" text-anchor="middle" fill="#000000">LCDIF 显示控制器</text>
+  <text x="820" y="172" font-size="11.5" text-anchor="middle" fill="#666666">按像素时钟从头到尾读显存</text>
+  <text x="820" y="192" font-size="11.5" text-anchor="middle" fill="#666666">本板 58.586 遍/秒</text>
+
+  <rect x="970" y="120" width="180" height="90" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="1060" y="150" font-size="14" text-anchor="middle" fill="#000000">SiI9022 → HDMI</text>
+  <text x="1060" y="172" font-size="11.5" text-anchor="middle" fill="#666666">并行 RGB 转 HDMI</text>
+  <text x="1060" y="192" font-size="11.5" text-anchor="middle" fill="#666666">I2C 1-0039</text>
+
+  <line x1="920" y1="165" x2="966" y2="165" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 显存 -->
+  <rect x="720" y="300" width="200" height="70" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.6"/>
+  <text x="820" y="328" font-size="14" text-anchor="middle" fill="#0d47a1">framebuffer 显存</text>
+  <text x="820" y="350" font-size="11.5" text-anchor="middle" fill="#0d47a1">0x8c100000 起 32 MiB</text>
+
+  <!-- 应用直接写显存(粗线,不经过内核) -->
+  <path d="M 640 150 C 700 150, 700 250, 760 296" fill="none" stroke="#1565c0" stroke-width="2.5" marker-end="url(#arrB)"/>
+  <text x="688" y="238" font-size="12" fill="#1565c0">直接写内存</text>
+  <!-- 控制器读显存 -->
+  <line x1="820" y1="296" x2="820" y2="214" stroke="#000000" stroke-width="1.5" stroke-dasharray="7 4" marker-end="url(#arr)"/>
+  <text x="832" y="258" font-size="11.5" fill="#333333">周而复始地读(虚线=控制器读)</text>
+  <!-- mmap 建立映射 -->
+  <path d="M 355 329 C 480 360, 600 340, 716 332" fill="none" stroke="#000000" stroke-width="1.2" stroke-dasharray="3 3"/>
+  <text x="470" y="368" font-size="11.5" fill="#333333">mmap 把这段物理内存映射进进程(建立映射时进一次内核)</text>
+
+  <!-- 图例 -->
+  <line x1="30" y1="460" x2="70" y2="460" stroke="#1565c0" stroke-width="2.5"/>
+  <text x="76" y="465" font-size="12" fill="#333333">写像素:直接写内存(每秒百万次,零系统调用)</text>
+  <line x1="500" y1="460" x2="540" y2="460" stroke="#000000" stroke-width="1.5"/>
+  <text x="546" y="465" font-size="12" fill="#333333">建立映射/配置(只发生一次)</text>
+  <line x1="820" y1="460" x2="860" y2="460" stroke="#000000" stroke-width="1.5" stroke-dasharray="7 4"/>
+  <text x="866" y="465" font-size="12" fill="#333333">硬件自治的读(虚线)</text>
+</svg>
