@@ -36,6 +36,12 @@ knowledge/labs/05_framebuffer/**/*
 !knowledge/labs/05_framebuffer/**/*.py
 !knowledge/labs/05_framebuffer/**/*.md
 
+# 01 章（Hello）实验目录：只收源码，产物（hello_x86/hello_arm_* 等）由教程里的命令重建。
+knowledge/labs/01_hello/**/*
+!knowledge/labs/01_hello/**/
+!knowledge/labs/01_hello/**/*.c
+!knowledge/labs/01_hello/**/*.md
+
 # 02 章（GCC）的 .bss 对照实验产物（fundamentals/01_ELF与程序加载 第四节），由教程里的命令重建。
 knowledge/labs/02_gcc/big1
 knowledge/labs/02_gcc/big2
