@@ -1,0 +1,144 @@
+# 13 GCC 常用选项手册
+
+**一句话本质**：GCC 的选项是一张"把哪几步做到哪、去哪找、怎么权衡"的开关表；
+这张表把原书第 2 章的选项清单（PDF 145-153）整合成可检索的查阅手册。
+
+用法：教程正文（02 篇）讲原理，这里查选项。每条给作用、最小例子和出处
+（PDF 页码或本仓实测）。例子默认 `gcc`，交叉工具链把命令换成
+`arm-linux-gnueabihf-gcc` 即可，选项完全相同（原书 2.2 节明示）。
+
+## 一、总体选项（控制做到哪一步）
+
+| 选项 | 作用 | 缺省产物名 / 备注 |
+|---|---|---|
+| `-E` | 预处理后即停 | 结果默认送 stdout；`-o x.i` 存文件 |
+| `-S` | 编译后即停，不汇编 | `source.c` → `source.s` |
+| `-c` | 汇编后即停，不链接 | `source.c` → `source.o` |
+| `-o file` | 指定输出文件名 | 四步都能用；不给时：可执行 `a.out`，`.o`/`.s` 按源名替换后缀 |
+| `-v` | 打印配置与内部调用的每条命令 | 排查"gcc 到底干了什么"的第一工具 |
+
+gcc 按输入后缀决定做到哪一步：`.c` 走全程、`.i` 只编译、`.s` 只汇编、
+`.o` 只链接。同一份 `main.c` + `sub.c`：
+
+    gcc -o test main.c sub.c          一条命令走全程(临时 .o 在 /tmp,用完即删)
+    gcc -c -o main.o main.c           分开编:改谁重编谁
+    gcc -c -o sub.o  sub.c
+    gcc -o test main.o sub.o          最后只链接
+
+（出处：PDF 134-136 图 2.1/2.2 与 2.3 节；多文件取舍的推导在教程 02 篇第 2 节。）
+
+## 二、警告选项
+
+| 选项 | 作用 | 本仓约定 |
+|---|---|---|
+| `-Wall` | 打开大部分常用警告（未用变量、声明前使用、类型不匹配…） | labs 与 project 全部启用 |
+| `-Wextra` | 在 `-Wall` 之外再开一组（未用参数、符号比较等） | project 的 Makefile 用 `-Wall -Wextra -Werror` |
+| `-Werror` | 把所有警告升级为错误 | CI 式纪律：有警告就编不过 |
+
+原书 2.4 的例子：`int i;` 定义未使用，不加 `-Wall` 无提示，加了才出
+`warning: unused variable 'i'`（PDF 139）。
+
+## 三、调试选项
+
+| 选项 | 作用 |
+|---|---|
+| `-g` | 以操作系统本地格式（Linux 上是 DWARF）产生调试信息，供 gdb 使用 |
+| `-g stabs+` 等 | 指定其他调试格式，一般用不到（PDF 139） |
+
+注意：`-g` 增大产物但不改变优化行为；优化（`-O2`）会把代码重排、内联，
+单步调试时行号会跳——**要调试就 `-O0 -g`，要发布就 `-O2`**（PDF 139-140
+对 -O1 的描述里说明了不优化时语句独立、便于调试）。
+
+## 四、优化选项
+
+| 选项 | 作用 | 代价 |
+|---|---|---|
+| `-O0` | 不优化（缺省） | 编译快，代码直白，最好调试 |
+| `-O` / `-O1` | 基础优化，减小体积与执行时间 | 编译稍慢 |
+| `-O2` | 几乎全部优化（不做循环展开、不做函数内联的空间换时间激进项） | 编译更慢；调试时行号会跳 |
+| `-O3` | 在 -O2 之上再开 `-funroll-loops`、`-finline-functions` 等 | 体积可能变大 |
+
+规则：**同时给多个 `-O`，最后一个生效**（PDF 140 原文）。一般应用常用 `-O2`
+（原书示例即 `-O2 -c -o main.o main.c`）。
+
+教程 02 篇第 5 节实测过 -O2 的两个"副作用"：无格式符的 `printf` 被改写成
+`puts`、Ubuntu 默认开启 fortify（`___printf_chk` 系列）——对比旧教材的
+符号表时别慌，那是优化与加固在起作用。
+
+## 五、链接器选项
+
+| 选项 | 作用 | 备注 |
+|---|---|---|
+| `xxx.o` | 直接把 OBJ 文件交给链接器 | gcc 按内容识别 OBJ 与库 |
+| `-llibrary` | 链接名为 library 的库 | 真名 `liblibrary.a` 或 `liblibrary.so`；去 `lib` 补后缀 |
+| `-static` | 阻止链接共享库，全部静态链入 | 本仓上板必加；放 `-o` **前面** |
+| `-shared` | 生成共享库而不是可执行文件 | 配 `-fPIC` 用；可多个 `.o` 打成一个 `.so` |
+| `-nostartfiles` | 不链启动文件（crt1.o/crti.o/crtbegin/crtend/crtn.o），标准库仍正常用 | 编 bootloader、内核用；普通程序这样编出来没有入口 `_start`，报 warning 且不能跑（PDF 141） |
+| `-nostdlib` | 连标准库也不链，只链你指定的文件 | 同上，编内核用；缺 printf 会报一大排 undefined reference（PDF 141-142） |
+| `-Xlinker option` | 把选项原样传给链接器 | 带参数的选项要写两遍 `-Xlinker` |
+| `-Wl,option` | 同上，逗号分隔可一次传多个 | 例 `-Wl,-Map,out.map` |
+| `-u symbol` | 强制链接器认为 symbol 未定义，从而拉入库模块 | 多个 `-u` 可叠 |
+
+**`-l` 的归档扫描规则**（PDF 140，值得读原文）：链接器扫归档（`.a`）时，
+只取"当前已出现但未解析的符号"需要的成员，且**不回头**——所以
+`gcc -o t a.o -lsub` 里 `-lsub` 放在用了它的 `.o` **之后**才保险；
+把库放在前面是"undefined reference"的经典来源。
+
+默认被链入的库（不写也有）：`-lgcc -lgcc_s -lc`，用 `gcc -v` 可见
+（教程 02 篇 1.2 的 collect2 命令行实测）。
+
+## 六、目录选项（搜索路径）
+
+| 选项 | 作用 | 备注 |
+|---|---|---|
+| `-Idir` | 头文件搜索路径加 dir | `<>` 只搜默认+`-I`；`""` 先当前目录 |
+| `-I-` | 把 `-I-` 之前的 `-I` 限定为只对 `#include ""` 生效 | 与 `-nostdinc`（连系统目录都不搜）不是一回事（PDF 143） |
+| `-Ldir` | 链接时库搜索路径加 dir | 运行时**无效**，运行时是 `LD_LIBRARY_PATH` |
+| `-Bprefix` | 指定编译器内部工具（cc1/as/ld）去哪找 | 也可用环境变量 `GCC_EXEC_PREFIX`（PDF 143-144） |
+
+三处"默认 + 自指定"的完整对照（头文件 / 链接时库 / 运行时库）在教程 02 篇
+第 3 节的表里。查默认路径不用写 .c 文件：
+
+    echo 'main(){}' | gcc -E -v -          列头文件搜索路径
+    gcc -print-file-name=libc.so           问某个库的实际位置
+    gcc -print-sysroot                     问 sysroot
+
+## 七、预处理与依赖
+
+| 选项 | 作用 | 备注 |
+|---|---|---|
+| `-Dmacro` / `-Dmacro=def` | 定义宏，等同 `#define` | 命令行开关功能块的标准手段 |
+| `-Umacro` | 取消宏定义 | |
+| `-include file` | 强制先包含某文件 | 像命令行版的 `#include` |
+| `-dM -E` | 预处理时把**所有宏**（含预定义）打出来 | 查"这个宏到底有没有、是什么值"（PDF 136、146） |
+| `-M` / `-MM` | 生成依赖清单（目标: 所有的 .c 与 .h） | `-MM` 不列系统头；清单打在 **stdout** |
+| `-MD` / `-MMD` | 同上，但**继续正常编译**，依赖写到与 `.o` 同名的 `.d` 文件 | 第 03 章 Makefile 自动依赖的基石 |
+
+**原书勘误**（2026-10-16 实测）：PDF 136 页写作 `gcc -M main.c abc.dep`，
+照敲会报错——`abc.dep` 被当成了多余的链接器输入（`linker input file unused`
+随后 error 退出 1）。`-M` 的清单只打在标准输出上；要落到文件就用 `-MD`：
+
+    $ gcc -MD -c -o main.o main.c && cat main.d
+    main.o: main.c /usr/include/stdc-predef.h
+
+03 篇 3.4 节兑现"后面 Makefile 会用"这句话。
+
+## 八、本仓高频组合（速查）
+
+    gcc -O2 -Wall -Wextra hello.c -o hello            日常编译(labs 约定)
+    gcc -c -o main.o main.c                           只编不链
+    gcc -o test main.o sub.o                          只链
+    gcc -static -O2 ... -o arm_static                 ARM 上板产物(必须静态)
+    gcc -shared -fPIC -o libsub.so sub.c              做动态库
+    ar rcs libsub.a sub.o                             做静态库
+    arm-linux-gnueabihf-gcc -v ...                    看交叉工具链内部动作
+    gcc -E -dM main.c | grep 某宏                     查宏
+    gcc -MD -c -o main.o main.c                       编译同时生成 .d 依赖
+
+## 九、原书提到但本仓暂不展开的
+
+- `-Idir` 之前加 `-I-` 的精细规则：多目录精细控制时才需要，用到再回 PDF 143。
+- `-Bprefix` / `GCC_EXEC_PREFIX`：自制工具链布局时才需要（PDF 143-144）。
+- `ld / objdump / objcopy` 选项（原书 2.9）：开发裸机、bootloader、调试 APP
+  时涉及，原书原话"到时再讲"；本仓在 fundamentals/01（ELF）与第 2 阶段驱动
+  教程里用到时再展开。

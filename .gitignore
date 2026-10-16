@@ -42,6 +42,11 @@ knowledge/labs/01_hello/**/*
 !knowledge/labs/01_hello/**/*.c
 !knowledge/labs/01_hello/**/*.md
 
-# 02 章（GCC）的 .bss 对照实验产物（fundamentals/01_ELF与程序加载 第四节），由教程里的命令重建。
-knowledge/labs/02_gcc/big1
-knowledge/labs/02_gcc/big2
+# 02 章（GCC）实验目录：只收源码，产物（main.o/libsub.*/test_* 等）由教程里的命令重建。
+# big1/big2（.bss 对照，fundamentals/01_ELF与程序加载 第四节用）是这一规则的两个名字。
+knowledge/labs/02_gcc/**/*
+!knowledge/labs/02_gcc/**/
+!knowledge/labs/02_gcc/**/*.c
+!knowledge/labs/02_gcc/**/*.h
+!knowledge/labs/02_gcc/**/*.sh
+!knowledge/labs/02_gcc/**/*.md

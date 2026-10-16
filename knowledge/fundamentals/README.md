@@ -176,6 +176,7 @@
 | [10 显示原理](10_显示原理.md) | 扫描模拟、空白与同步、帧率和 fbset 及 CEA 标准表对账、HDMI 信号链、EDID 解析并和板上模式清单逐行对账 | `knowledge/labs/00_basics/09_display_scan/` | 23 | 03 章 2.1、2.3、6 节 |
 | [11 数据表示：字节序、位序与定点数](11_数据表示_字节序位序与定点数.md) | 数值本身没有排列方向；协议决定字节权重，点阵格式决定位权重，定点格式决定缩放因子 | `knowledge/labs/00_basics/10_data_representation/` | 13 | 04 章 2-4、7 节 |
 | [12 第三方库的交叉构建与部署](12_第三方库的交叉构建与部署.md) | 在电脑上把库构建成 ARM 产物并隔离安装；编译、链接、运行三个时刻各有一条独立搜索路径 | `knowledge/labs/00_basics/11_cross_library/` | 13 | 04 章 5、8 节 |
+| [13 GCC 常用选项手册](13_GCC常用选项手册.md) | **手册篇**。原书第 2 章选项清单的整合勘误版：总体/警告/调试/优化/链接器/目录/依赖七类 + 本仓高频组合 | —（查阅手册，免判据） | — | 02 篇第 7 节 |
 
     一次跑全部：for d in knowledge/labs/00_basics/*/; do bash "$d/check.sh"; done
     09 篇要跑全套，从 Windows PowerShell 用 root：
