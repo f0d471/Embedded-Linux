@@ -26,9 +26,9 @@
 
 ## 二、主教材与页码校准
 
-PDF 在资料仓根目录（33 MB）：
+原书 PDF（33 MB）已复制到本仓 `Sources原书`（不入 git，.gitignore 已覆盖），查页码不用再去资料仓；资料仓仍是完整来源（各章源码目录、插图都在那边）：
 
-    嵌入式Linux应用开发完全手册V5.3_IMX6ULL_Pro开发板.pdf
+    Sources原书嵌入式Linux应用开发完全手册V5.3_IMX6ULL_Pro开发板.pdf
 
 PDF 目录里标的页码，比阅读器里的实际页码小 9：
 
