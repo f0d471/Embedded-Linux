@@ -1,81 +1,44 @@
-# 嵌入式 Linux 学习仓（100ASK_IMX6ULL Pro）
+# 嵌入式 Linux 技术库（100ASK_IMX6ULL Pro）
 
-目标：学完一整套嵌入式 Linux 从应用到驱动的知识，并整合出一个可运行的完整项目
-和一份能当教材用的笔记。
+从零开始学嵌入式 Linux，并把学到的知识落成一台可运行、可复测的设备。
 
-## 一、这个仓和资料仓的关系
+本仓是**完全自足的教程库**：不需要看原视频，不需要翻原书——原书和视频的知识
+已经提取进 knowledge/ 的教程里；外部源项目作为技术参照，一层一层搭进自己的
+project/。原始资料本身放在 sources/（不入 git），只作改写素材与最终兜底。
 
-配套资料仓（只读，不要往里写东西）：
+## 一、仓库四部分
 
-    E:\Workspace\01_all_series_quickstart-master
+    sources/       原始资料库（不入 git）。原书 PDF、26 集视频字幕、外部源项目的
+                   登记与章节对照，地图见 sources/README.md。
+    knowledge/     知识库，本仓的重心。
+      tutorials/     教程，按原书篇章与章号组织（第四篇应用编程 11 章、
+                     第五篇驱动开发）。完整给出每条命令、每段代码，
+                     手把手做实验，配判据。
+      fundamentals/  基础知识与查阅手册：教程的前置知识（讲解篇，对照
+                     RISC-V/ysyx 搭桥），以及原书罗列型知识点的手册
+                     （手册篇：GCC 选项、Makefile 语法……）。
+      labs/          课程实验与判据脚本，按教程章号组织，check.sh 自动核对。
+    project/       自己的工程：网络视频终端（路线图见 Engineering/Todo）。
+      七层注册链表框架（display/input/font/ui/page/config/business）+ items
+      测试项，check.sh 三套件 124 条判据。
+    Engineering/   工程文档：TechReports（每个工作点一章，六节固定）/
+                   Todo / Bugs。体例照搬 Loongarch_NPU_SoC 与 Efinix 两仓。
 
-主教材（唯一的文字教程，550 页）：
+协作规则见 [AGENTS.md](AGENTS.md)；knowledge 的体例唯一出处是
+[knowledge/README.md](knowledge/README.md)；"提交即更新文档"的对照表在
+[Engineering/README.md](Engineering/README.md)。
 
-    嵌入式Linux应用开发完全手册V5.3_IMX6ULL_Pro开发板.pdf
+## 二、汲取路线
 
-资料仓里没有视频，04/05/06 目录下只有源码和插图。视频在 B 站，PDF 每篇开头都
-附了对应的 B 站链接，当辅助材料看。
+    第一来源  韦东山《嵌入式Linux应用开发完全手册》+ 配套视频 + 32 步量产工具项目
+              （E:\Workspace\01_all_series_quickstart-master，只读）
+              状态：应用编程前三章已按新体例重写为教程，其余逐章推进
+              （排期见 Engineering/Todo/knowledge教程化路线.md）
+    第二来源  边缘视觉质检终端产品级项目（付费课程，已申请软著：
+              只汲取架构思想与工程方法，禁止复制其代码与文档进仓、禁止上传）
+              落点：Engineering/Todo/质检业务嫁接-inspect层与产品化.md（Q 刀）
 
-工作方式固定为：翻 PDF 到某一章 -> 到对应 source 目录找那份代码 -> 读本仓的解读
--> 做本仓的实验。
-
-重要：PDF 目录里标的页码比阅读器里的实际页码小 9。本仓 sources/README.md
-里两个页码都给了，以「PDF 页」列为准直接跳页。
-
-## 二、笔记的定位（本仓的核心）
-
-笔记**不替代 PDF 和视频，也不打算替代**。三份材料分工如下：
-
-    PDF        操作手册。命令怎么敲、选项叫什么。可检索，忘了就翻回去。
-    视频       现场演示。有 PDF 里没有的东西：出错的现场、临时起意的对比实验、
-               以及"这个东西是怎么被逼出来的"那段推导。缺点是线性，不能跳着找。
-    本仓笔记   过滤器和脉络图。降低前两份的门槛，让你带着一张图去看它们。
-
-笔记要做的是五件事，编在一起，不是分成几大块：
-讲完一个点就立刻动手验一个点，验完再讲下一个。
-
-0. 过滤：每一段开头给一张表，告诉你这一段该看视频的哪几分钟、PDF 的哪几页，
-   哪些可以直接跳过。两个半小时的视频里真正要逐帧看的可能只有四十分钟，
-   把这四十分钟标出来，就是笔记最直接的价值。
-
-1. 解读：把 PDF 讲得含糊、跳过、或者只给结论的地方补深，打通到硬件和内核层面。
-   PDF 负责告诉你怎么做，解读负责告诉你为什么是这样、以及不这样会怎样。
-   每一段开头先用第一性原理把核心压成一两句话（"编译器只是在选给谁生成机器码"、
-   "make 只会比时间戳"），后面的一切都从那一句推出来。
-   需要画图时，优先用 Markdown 表格或自上而下的单列流程。一张图省三段话，
-   也能把"哪一步在内核里、哪一步在用户态"这种边界画清楚。不要用中文字符的
-   显示宽度撑边框或排多栏；这类 ASCII 图换字体或换预览器就会错位。
-
-2. 基础知识库 knowledge/fundamentals/：主线章节里遇到的通用名词，凡是不属于本章主线、
-   以后还会反复出现的（寄存器 r0/s0、ELF、sysroot、PLT/GOT、系统调用...），
-   都单开一篇放这里，主线里只留一句话加一个跳转 [基础]。
-
-   这些篇章全部从 RISC-V / ysyx 那边搭桥讲起 —— 你有那套基础，
-   所以只讲"ARM/Linux 这边不一样在哪"，不从零讲什么是寄存器。
-
-   规矩：用到就加，不预先写全。没被任何一章引用过的篇章不要写。
-
-3. 实验：不单独成章，插在讲解中间。每个动手块标一个强度：
-
-       L1 复现   跑通并观察现象。占比要小，只用来建立事实基础。
-       L2 改造   给定目标，改现有代码，必须改出预期的可观测变化。
-       L3 从零写 不看资料仓源码，自己写一段完整的程序。
-       L4 入项目 把这一层能力落进 project/，加出一整层代码。
-
-   L4 是最终目的。每学完一个层级（显示层、输入层、文字层、UI 层...），
-   project/ 里就多出可运行的一层。
-
-   **每个动手块开头都要有"先自己想"**：给目标和线索，不给现成命令。
-   给出的答案里，每个参数都要注明它在管什么。
-   光会敲命令没用，换个场景就拼不出来了。
-
-4. 判据：每个实验都要有一条能判对错的标准。没有判据的实验等于没做。
-   判据要能"注错见红"：故意把代码改坏，判据必须失败。
-
-   笔记里写的所有输出、数字、报错，都是在本机真跑出来的，不照抄书。
-   （第 01 章就抓到两处：静态链接体积倍数、以及篡改 e_machine 后的实际报错，
-   照书上写会直接判据失败。）你跑出来和笔记不一致时，先信自己的机器，
-   查清楚原因，然后回来改笔记。
+素材对照（原书 11 章框架、视频分集与字幕、各章源码目录）全部在 sources/README.md。
 
 ## 三、开发板资源（决定哪些实验能做）
 
@@ -101,219 +64,42 @@
 ## 四、环境策略
 
 日常开发在 WSL Ubuntu 里做，只有真正需要上板验证时才连板子。
+环境与判据的完整规则在 [project/doc/开发环境.md](project/doc/开发环境.md)
+与 [project/doc/验证流程.md](project/doc/验证流程.md)，先记三条：
 
-    第 1 阶段（应用编程）  绝大部分能在 WSL 里用 x86 gcc 跑通逻辑，
-                          交叉编译产物攒着，阶段末尾集中上板验一次。
-    第 2 阶段（驱动开发）  必须上板。编内核模块要用板子 BSP 里的工具链和
-                          内核源码，apt 装的 gcc-arm-linux-gnueabihf 不行。
+    1. 第 1 阶段（应用编程）绝大部分实验在 WSL 里用 x86 gcc 跑通逻辑，
+       交叉编译产物攒着，阶段末尾集中上板验一次；第 2 阶段（驱动开发）必须上板，
+       要用板子 BSP 的工具链和内核源码。
+    2. 故意没装 qemu-user-static：装了它 x86 上能直接跑 ARM 程序，
+       01 篇"必须报 Exec format error"那条判据就失效了。
+    3. 交叉工具链 glibc（2.41）比板上（2.30）新，动态产物上板会报
+       GLIBC not found，上板程序一律 `-static`（教程各篇已按此写）。
 
-已装（Ubuntu 26.04 on WSL2，gcc 15.2.0）：
+## 五、进度
 
-    gcc / make / ccache                本机 x86-64
-    arm-linux-gnueabihf-gcc            交叉编译器，15.2.0
-    binutils-arm-linux-gnueabihf       readelf / nm / objdump 的 ARM 版
-    file / bc
+    [x] 仓库重构（2026-10-16）：四部分骨架、CodeReading 删除、教程化路线立项
+        排期与逐章状态见 Engineering/Todo/knowledge教程化路线.md
+    [ ] knowledge 教程化
+        [~] 01_HelloWorld / 02_GCC / 03_Makefile（2026-10-16 本轮重写中，
+            完成一篇勾一篇；融合字幕 11 集 + PDF 141-165）
+        [ ] 04_文件IO ～ 06_文字显示（旧体例占位，待重写）
+        [ ] 07_输入系统 ～ 11_串口（待写；素材 = PDF + 源码 + TechReports 实测）
+        [~] fundamentals 13 篇讲解篇（311 条判据）；手册篇 2 篇本轮新增
+            （13_GCC常用选项手册 / 14_Makefile语法与函数手册）
+        [ ] 02_驱动开发（未开工，前置 = BSP 工具链与内核源码）
+    [ ] project（现行终点 = 网络视频终端，刀 0 起步）
+        量产工具旧路线已走完并归档（TechReports 06-09，判据 73 → 124）
+        判据基线：bash project/check.sh → TOTAL 124 PASS / 0 FAIL / 0 SKIP
 
-    故意没装 qemu-user-static：装了它 x86 上能直接跑 ARM 程序，
-    第 01 章"必须报 Exec format error"那条判据就失效了。见 01 章第 2.9 节。
-
-## 五、本仓结构
-
-    notes/       解读 + 实验 + 判据。教材，读者是正在学这门课的人。
-      00_基础/          通用知识库，主线用到就加一篇，全部对照 RISC-V 讲
-      01_应用编程/
-      02_驱动开发/
-      03_项目/          project/ 这棵代码树的工程文档，读者是要接手改代码的人
-        TechReports/      每个工作点的开发过程，按时间线叙事，写完定稿
-        CodeReading/      各层逐行讲解，一行不落，含行号，跟随最新代码
-        Todo/             未完成事项的 spec 与开发日志，完成后删除
-        Bugs/             未修复的在产缺陷，修复后删除
-    labs/        自己动手敲的实验代码，按 章号_名字 建目录。
-                 不要拷贝资料仓的源码，抄一遍等于没学。
-    project/     终点整合项目。逐层长出来。
-    tools/       上板辅助脚本。serial-board.ps1 经串口登录板子、发命令、
-                 传文件并校验 SHA-256（本仓不用 ADB）。
-    refs/        章节对照表：PDF 页码、视频分集、资料仓源码位置三者的对照。
-
-`knowledge/` 教程和 `Engineering/` 的分工：前者讲"这个知识点怎么学会"，
-后者讲"这段代码为什么长这样、这一行在算什么"。同一件事在两边都出现是正常的。
+labs 判据基线（WSL）：knowledge/labs/00_basics 十一套 + 06_text 合计
+323 PASS / 0 FAIL / 6 SKIP（SKIP 为 root 项与需显示器的组）。
 
 ## 六、文档规则
 
 **每一次 commit，都要在同一次 commit 里把它影响到的文档改完。**
+完整的对照表在 [Engineering/README.md](Engineering/README.md)
+的"项目规则：提交即更新文档"一节。两条硬约束先记在这里：
 
-完整的对照表（改了什么就必须同步哪份文档）在
-[Engineering/README.md](Engineering/README.md) 的"项目规则：提交即更新文档"一节。
-两条硬约束先记在这里：
-
-    1. CodeReading/ 每一节标题都带行号区间。代码增删行后，全篇行号一并订正。
-       订正方法是重新 grep -n '' <文件> 对一遍，不靠记忆。
+    1. 引用代码位置时行号必须准。重新 grep -n '' <文件> 对一遍，不靠记忆。
     2. 文档里出现的 PASS 数、体积、行数、耗时，一律以本机或板上实测为准。
        改完代码先跑 bash project/check.sh，拿到的数字再写进文档。
-
-## 七、进度
-
-    [x] 00 基础知识库  2026-09-08 全部八篇按新体例重写完毕
-                       2026-09-12 开头块再修订：改成"一句话本质 -> 你从哪儿撞见它
-                       -> 它被什么逼出来 -> 关键细节"，结论条数按内容定不再写死
-                       体例与四条换代理由见 knowledge/fundamentals/README.md
-                       2026-09-15 为第 03 章补三篇：08 进程与信号 / 09 驱动与设备文件 /
-                       10 显示原理（起因是 03 章二十来个术语没定义就用，见 00_基础/README 问题 5）
-                       2026-09-16 为第 04 章补两篇：11 数据表示 / 12 第三方库的交叉构建与部署
-        现有十三篇各配一个 check.sh，合计 311 条判据全绿（09 篇有 11 条要 root），每篇都做过注错见红。
-        一次跑全部：for d in knowledge/labs/00_basics/*/; do bash "$d/check.sh"; done
-
-        00 从源码到运行     新写，其余各篇的前置。四个程序的交接过程，
-                            section 从"链接器按什么单位合并"里被逼出来
-        01 ELF 与程序加载   删掉整张 section 表（-3580 字节）程序照跑，
-                            只改 2 字节让 segment 数归零就 Exec format error
-        02 ARM 寄存器       不先给寄存器表，用反汇编把调用约定逼出来
-        03 ABI 与 sysroot   用 _Static_assert 问出跑不了的平台上的类型大小；
-                            实测发现 libc.so 是链接脚本不是 ELF（推翻旧判据）
-        04 静态库动态库     决定性实验：改库不重编程序，动态版 7->12、静态版不变
-        05 系统调用         绕过 libc 自己发 syscall；三档缓冲实测
-        06 fd 与 VFS        程序自己读 /proc/self/fdinfo，pos 是 1/0/1
-        07 虚拟内存与 mmap  懒分配的定量证据；顺带测出内核的 fault-around（32 页）
-        08 进程与信号       killall 返回时进程还在（SIGTERM 后又活 2 秒）；exit(139) 和段错误
-                            在 $? 上一样、waitpid 状态字不一样；WSL 里孤儿归 Relay 不归 1 号
-        09 驱动与设备文件   自己 mknod 出 null/zero/full；ENXIO/ENODEV/nodev 三种打不开；
-                            fb 的 ioctl 请求码不带结构体大小
-        10 显示原理         软件模拟扫描，帧率和板上 fbset、内核 CEA 表逐项对账；
-                            电脑注册表里的 EDID 解出来和板上模式清单 18 行逐行相同
-        11 数据表示         同两个字节按大小端解释出不同数；同一字节按 MSB/LSB-first
-                            画出镜像点阵；用 26.6 定点数保住亚像素精度
-        12 第三方库         分开复现编译/链接/运行三种失败；隔离交叉构建 FreeType 2.10.2，
-                            用 ELF Machine 和 SONAME 链验收 ARM staging
-
-    [ ] 阶段 1  应用编程   PDF 141-300
-        [ ] 01 工具链与构建系统（HelloWorld / GCC / Makefile）
-            笔记已重写为导学定位：过滤表（11 集视频看哪几分钟）+ 第一性原理
-            速通 + 动手实验 + 判据。视频内容已融合（NFS 挂载、串口参数、
-            gcc 内部三个程序、静态库动态库现场制作、假想目标的坑、通用 Makefile）
-            基础知识库已配套 5 篇：ELF / ARM 寄存器 / ABI 与 sysroot /
-                                   静态库动态库与符号 / 系统调用
-            L4 已落地并自验：project/ 六层空壳骨架 + 两棵产物树
-            工程文档已配套：TechReports 1 篇 + CodeReading 对应篇 + 路线图 1 篇
-            L1 / L2 / L3 待自己动手；串口上板闭环已真机验证：x86 格式错误、
-            ARM 动态版 glibc 不匹配、ARM 静态版成功，命令与退出码已写回笔记
-            上板统一走 tools/serial-board.ps1（不用 ADB）：串口登录、发命令、
-            base64 传文件并校验 SHA-256
-        [ ] 02 文件 IO
-            笔记：fd 是下标不是指针（三张表 + /proc/fdinfo 实证）、
-            read/write 是"最多"不是"正好"、O_APPEND 的原子性（并发实测）、
-            标准 IO 那层 buffer（strace 数出 3 次 vs 1000 次 write）、
-            mmap（系统调用少 2000 倍但耗时看不出稳定差别）
-            8 集视频（2 小时 44 分）已融合，过滤表精确到时间段。视频独有的
-            三块全部补进笔记：两套接口的来历（POSIX vs C 标准）、
-            CSV 综合实验（PDF 4.3 那个空标题的全部内容，整理成 L3）、
-            内核那一侧的调用链与 OABI/EABI
-            实测更正一条：应用写 open，glibc 发的是 openat（ARM 上是 322 号
-            不是 5 号），视频里"open -> sys_open"那条链中间一环名字对不上
-            基础知识库新增 2 篇：文件描述符与 VFS / 虚拟内存与 mmap
-            L4 已落地并自验：log_redirect() 让现有日志从终端改写到文件，
-                             保留项目错误与系统 errno；六层代码一字未改；
-                             check.sh  29 PASS / 0 FAIL / 0 SKIP
-            工程文档已配套：TechReports 第 02 章 + CodeReading 对应篇订正
-            L1 / L2 / L3 待自己动手；fd/追加/mmap/异常退出、eMMC 同步写与
-            project 日志判据均已在 ARM 真机经串口复跑，完整步骤与输出已写回笔记
-        [ ] 03 Framebuffer 显示
-            笔记：显示就是写内存（WSL 里 mknod c 29 0 报 ENODEV，内核没有 fb 实例）、
-            var/fix 三笔对账（行宽、显存地址、由时序算出 58.586 Hz）、
-            fb_fix_screeninfo 在 x86-64 上 80 字节而 ARM 上 68 字节、
-            行宽必须用 line_length（行尾填 8 字节时竖线散到 513 个 x）、
-            按位段拼色（纯红测不出 565 位数写反）、只数个数的判据放过整体平移
-            板上：出厂 GUI mxapp2 映射着整个 32 MiB 显存，只重画时钟那 92 字节；
-            停掉后回读红 100 / 白 614300；不插显示器截屏转 PNG；
-            读显存比写显存慢 10 倍（47 vs 481 MiB/s）
-            视频 4_5-1（14 分钟）已融合，PDF 两处错误已标出
-            测量探针 8 个在 knowledge/labs/05_framebuffer/probe/
-            插 HDMI 后实测：sii902x 把模式从 1024x600x32 改成 1280x720x16 60Hz，
-            彩条回读八种颜色计数与推算值逐项相等，显示器上颜色顺序和四边白框肉眼确认无误；
-            拔掉显示器后是否变回 1024x600x32 未测
-            2026-09-15 重排：主线改成一条直线（写内存 -> 像素位置 -> 颜色 -> 上板 -> 插 HDMI
-            -> display 层），内核源码深挖挪到末尾延伸 A-D，各节开头标明先读哪篇基础；
-            修正 2.2 节 mknod 原来写在 /mnt/e 下做（Windows 盘不支持设备文件，照做必失败）
-            L4 已落地并自验：display 层注册链表 + 真假两个后端（mmap /dev/fb0 与 malloc
-                             假显存）+ 画点填矩形 + unittest/disp_test 与两个独立计数脚本；
-                             check.sh  52 PASS / 0 FAIL / 0 SKIP（判据 29 -> 52）
-            工程文档已配套：TechReports 第 03 章 + CodeReading display 层一篇、
-                            相关篇目订正
-            display 层已上板（2026-09-22，未接显示器那一组）：停掉 mxapp2 之后
-            disp_test 报 mode 1024x600x32 line_length 4096 与 fbset 一致；
-            dd 读回一屏交给板上的 count.sh 数，计数与坐标和电脑上用假显存
-            预演的那组逐项相等（614359 / 12 / 12 / 12 / 4 / 1，板上计数耗时 41.6 秒）；
-            连跑两次 dd 的 sha256 相同；product_tool 走真 fb 后端 13 行退出码 0
-            坑：交叉工具链的 glibc 比板上新（2.41 vs buildroot 2.30），动态产物
-            报 GLIBC_2.38 not found 起不来，要 make LDFLAGS=-static（72 KB -> 495 KB）
-            fbinfo / 假显存描点 / 按位段拼色 待自己动手；插 HDMI 那组待测
-        [x] 04 文字显示（ASCII / 中文 / FreeType）
-            笔记已按 5 集字幕、PDF 182-215 页和配套源码重写：字符身份与字形分层、
-            UTF-8 严格解码、ASCII/HZK16 点阵寻址、FreeType 灰度覆盖图、
-            baseline/bbox/advance/26.6 排版、framebuffer alpha 合成与 font 层契约
-            教材勘误已就地标出：UTF-16 代理对、ANSI 不是固定编码、line_length/pitch、
-            灰度字节不是蓝色、fexec-charset 与 wchar_t 的边界
-            本机自动实验：knowledge/labs/06_text 24 PASS；基础 11/12 各 13 PASS；
-            FreeType 2.10.2 已真实交叉构建为 ARM EABI5，fbtext 静态 ARM 产物已验 ELF
-            2026-09-16 串口真机闭环完成：CH9102/COM8 上传整文件 SHA-256 一致；
-            32bpp Ag 的 covered=written=nonblack=2162、bbox=(40,66)..(130,138)、217 色；
-            A中g 为 3 glyph / 0 缺字，3650 个非黑像素；BUG_NO_ALPHA 后颜色从 217 降到 2；
-            临时切到 RGB565 后 stride=2048、回读 1228800 字节，21 个低覆盖像素量化为黑；
-            实验结束已恢复 32bpp 并重启 mxapp2
-            2026-09-23 L4 已直接落地：font provider 链 + builtin/FreeType 两后端，
-                       严格 UTF-8（含首坏字节）、baseline/bbox/26.6 advance、missing
-                       fallback、MONO/GRAY、正负 pitch、四边裁剪和 framebuffer alpha 合成；
-                       ARM 首次自动隔离构建 FreeType 2.10.2 静态库，不搬用主机动态库
-            本机真字体 Ag中：3 码点 / 0 缺字 / advance=6144 / 203 色；ASan 无报告
-            板上 msyh.ttc：covered/drawn/clipped=1758/1758/0；真 fb 为
-                           1280x720x16、stride=2560，回读 1843200 字节、74 色，边界完整
-            工程文档：TechReports 04（含 fig/04-font层架构.svg）
-        [x] 05 输入系统（时间压缩路径：不另写课件，直接完成 L4）
-            input provider 链 + replay/evdev 两后端；原始记录只在 SYN_REPORT 提交，
-            SYN_DROPPED 与 EOF 半帧丢弃；支持 REL 鼠标、ABS/MT 触摸、普通按键、
-            持续按钮位图、绝对坐标缩放、相对坐标四边钳制和总 deadline poll
-            没照搬参考项目的读取线程/环形队列：队满静默丢失、条件等待和退出协议
-            留到第 07 章统一处理；当前同步 poll 没有后台线程生命周期竞争
-            本机与 ARM 回放输出逐项一致，共 5 帧；ASan 无报告；畸形回放和
-            /dev/null 冒充 evdev 均被拒绝
-            板上真实 evdev 自动选中 gpio-keys event1，5 秒 poll 干净超时；当时未接
-            USB 鼠标，故不宣称真实 pointer 动作已验证，接鼠标后只需复跑现有 --once
-            工程文档：TechReports 05（含 fig/05-input层架构.svg）+ Bugs/01
-            project/check.sh 最终 73 PASS / 0 FAIL / 0 SKIP（52 -> 73）
-            CodeReading 重排为一层一篇，共 8 篇（common/display/font/input/
-            空壳三层与 main/unittest/Makefile/check 脚本）
-        [x] 06 网络通信
-            笔记未写(口径:只做 L4);netinput provider 落地:20 字节定长线上格式、
-            get_fds 多 fd 契约、坏客户端整条隔离;发送端吃 replay 同格式文本,
-            同一 fixture 回放/TCP 两路输出逐行相同
-            本机判据 [15]/[15r](计数 + 注错);板上 loopback 5 帧逐行同构
-            (2026-10-04,坐标按 1024x600 缩放);判据 73 -> 83
-            工程文档:TechReports 06 + CodeReading input 篇重写
-        [x] 07 多线程
-            input 层线程化:专职读取线程 + 32 槽环形队列,队满丢最旧,
-            received/delivered/dropped 三本账;cond 绑 CLOCK_MONOTONIC;
-            provider 错误经 g_error 穿透队列(保住 [14] 退出码 2)
-            压力判据 400 帧 received=400 delivered=33 dropped=367 闭合;
-            tsan 无报告,拆锁注错报 7 处竞争;判据 83 -> 90
-            工程文档:TechReports 07
-        [x] 08 I2C
-            items/ap3216_read:i2c-dev 直读,总线自动探测;
-            板上实测 0x1e 在 i2c-0(无设备树节点,用户态唯一通路),
-            六连读数值随采样变化;遮光判据待人工;ALS 撕裂读嫌疑未修
-            板上 strace 抓到探测循环 g_fd 未挂上的真缺陷,已修复
-        [x] 09 串口
-            items/serial_loop:termios raw + PING 帧异或校验 + 回显自检;
-            WSL 判据用伪终端对端(python pty)5/5 全对;板上 ttymxc2/5
-            probe 全通;控制台 ttymxc0 不发数据
-        [x] 项目整合(量产工具路线):config/ui/page/business 四层
-            config 四象限默认值;ui 按钮两态;page 切换即 destroy+create;
-            business 具体页面+fork/exec 命令+主循环(q 键退出)
-            端到端回放链:点击执行命令、两页切换、9 事件退出;
-            板上 GUI 真写 fb(边框像素 0x00909090 实测),mxapp2 已恢复
-            工程文档:TechReports 08/09 + CodeReading 四新篇 + input/main/
-                     Makefile/unittest/check 篇重写,CodeReading 8 篇 -> 12 篇
-            project/check.sh 三套件:check.sh/check_core.sh/check_font_input.sh/
-                     check_gui.sh,TOTAL 124 PASS / 0 FAIL / 0 SKIP(73 -> 124)
-    [ ] 阶段 2  驱动开发   PDF 301-495
-        量产工具路线的逐章施工表已全部勾完(Engineering/Todo/
-        项目路线图-对齐电子产品量产工具.md 第四节);现行终点仍是
-        网络视频终端(刀 0 起步)
