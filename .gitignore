@@ -15,6 +15,15 @@ knowledge/labs/**/hello_arm_static
 knowledge/labs/**/*.gz
 knowledge/labs/**/*.tar
 
+# 03 章（Makefile）实验目录：只收源码与 Makefile，产物（*.o .*.d app、
+# 各层 built-in.o）由 make 重建。mini_proj/proj 两个工程都走这条白名单。
+knowledge/labs/03_makefile/**/*
+!knowledge/labs/03_makefile/**/
+!knowledge/labs/03_makefile/**/*.c
+!knowledge/labs/03_makefile/**/*.h
+!knowledge/labs/03_makefile/**/Makefile
+!knowledge/labs/03_makefile/**/*.md
+
 # 04 章（文件 IO）上板测试包：由教程里的命令重建。
 knowledge/labs/04_file_io/board/
 
