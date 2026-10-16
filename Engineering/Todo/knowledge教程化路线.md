@@ -1,4 +1,4 @@
-# knowledge 教程化路线
+# Knowledge 教程化路线
 
 状态：**进行中。**
 
@@ -6,10 +6,10 @@
 
 2026-10-16 仓库重构定案：仓库定位从"笔记不替代原书原视频，只做过滤器"改为
 "**教程完全自足**"。原书 PDF 与视频的知识要被**提取完**，读者不再需要看视频、
-翻原书。这要求把 `knowledge/` 全部教程按新体例重写一遍，并给 fundamentals
+翻原书。这要求把 `Knowledge/` 全部教程按新体例重写一遍，并给 fundamentals
 补上"手册篇"这一新类型（原书罗列型知识点的查阅手册）。
 
-新体例规则唯一出处是 [knowledge/README.md](../../knowledge/README.md)，本文只记排期与状态。
+新体例规则唯一出处是 [Knowledge/README.md](../../Knowledge/README.md)，本文只记排期与状态。
 
 ## 2 怎么切分
 
@@ -31,11 +31,11 @@
 | 10 | （待建）I2C 应用编程 | PDF 268-294 + 源码 15_I2C + TechReports 09 | 未开工 |
 | 11 | （待建）Linux 串口应用编程 | PDF 295-300 + 源码 14_UART + TechReports 09 | 未开工 |
 
-第 7～11 章没有字幕，素材 = PDF + 源码目录 + project/ 已落地层的 TechReports 实测记录。
+第 7～11 章没有字幕，素材 = PDF + 源码目录 + Project/ 已落地层的 TechReports 实测记录。
 
 ### tutorials/02_驱动开发（原书第五篇）
 
-未开工。章节对照见 sources/README.md 第五节。前置条件：BSP 工具链与内核源码
+未开工。章节对照见 Sources/README.md 第五节。前置条件：BSP 工具链与内核源码
 （区别于应用编程阶段的 apt 工具链）。
 
 ### fundamentals 配套改造
@@ -53,7 +53,7 @@
   上板环节沿用已有板上实测（板子不在线时不重跑，教程标注实测日期）；
   配套 labs 判据脚本全绿。
 - 全部完成的判据：11 篇 + 驱动篇不含「占位」声明；全仓 grep 不到
-  "过滤器""先自己想"旧体例用语；sources/README.md 的状态列全部为"已重写"。
+  "过滤器""先自己想"旧体例用语；Sources/README.md 的状态列全部为"已重写"。
 
 ## 4 开发日志
 

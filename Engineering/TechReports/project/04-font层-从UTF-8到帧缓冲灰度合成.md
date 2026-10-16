@@ -2,7 +2,7 @@
 
 ## 一、动机
 
-display 层（第 03 章）收尾时，`project/` 已经能把 `0x00RRGGBB` 写进 16/32 位
+display 层（第 03 章）收尾时，`Project/` 已经能把 `0x00RRGGBB` 写进 16/32 位
 framebuffer 并用独立脚本对显存逐像素对账，判据 52 条。上层离"画出 `A中g`"还差四件事：
 字节序列到码点的解码、码点到字形的选取、字形在基线上的摆放、覆盖率与背景色的合成。
 这四件事任何一件错了一环，症状都一样是屏幕上没字或位置错，所以每一环都要有能数的判据。
@@ -234,7 +234,7 @@ x86 的 `pkg-config` 结果带进了 ARM 链接，报主机路径下的动态库
 2.41，任何动态链接新库的产物都报 `GLIBC_2.38 not found`。
 
 **定位** 第 03 章的结论（静态链接 495 KB 产物）在 FreeType 上同样适用，于是从
-资料包源码隔离构建。第一次完整验收时判据脚本把 `project/` 复制进 `/tmp` 再跑，
+资料包源码隔离构建。第一次完整验收时判据脚本把 `Project/` 复制进 `/tmp` 再跑，
 Makefile 里的相对路径 `../../01_all_series_quickstart-master/...` 在副本里失效，
 `missing tarball` 退出。
 
@@ -264,13 +264,13 @@ covered 数的是"字形有墨迹的像素"，nonblack 数的是"显存里亮起
 
 ## 五、结果
 
-测量方法：`wsl bash project/check.sh`（总入口，含两个 suite）；ARM 产物
+测量方法：`wsl bash Project/check.sh`（总入口，含两个 suite）；ARM 产物
 `make CROSS=arm-linux-gnueabihf- LDFLAGS=-static` 后经串口脚本上传、整文件
 SHA-256 对账；板上实验经串口交互完成。
 
 | 测量项 | 改动前 | 本轮后 |
 |---|---|---:|
-| `project/check.sh` 总判据 | 52 PASS | 73 PASS / 0 FAIL / 0 SKIP（font 占 13 条） |
+| `Project/check.sh` 总判据 | 52 PASS | 73 PASS / 0 FAIL / 0 SKIP（font 占 13 条） |
 | font 层交付源码 | 0 行 | font/ 四个 .c/.h 共 583 行 + disp_blend_pixel 33 行 |
 | ARM 静态 font_test | 不存在 | 3,150,904 字节，上板可跑 |
 | ASan（builtin→probe→freetype 切换） | 未跑 | 无 LeakSanitizer 报告 |

@@ -2,7 +2,7 @@
 
 ## 一、动机
 
-`project/` 的层表里，ui、page、business 三行从第 01 章起就是打印一行日志的
+`Project/` 的层表里，ui、page、business 三行从第 01 章起就是打印一行日志的
 空壳，config 目录根本不存在。第 03 至 05 章落地的 display/font/input 三层
 各自能测，但没有人消费它们：程序起得来、退得出，屏幕上什么都没有。路线图
 （对齐电子产品量产工具）把这批工作整体划给"项目整合"，对应 $P 的第 18 到
@@ -206,11 +206,11 @@ business/business_manager.c:46:39: error: unused parameter 'name'
 
 ## 五、结果
 
-测量方法：`wsl bash project/check.sh`。
+测量方法：`wsl bash Project/check.sh`。
 
 | 测量项 | 改动前 | 本轮后 |
 |---|---|---|
-| `project/check.sh` 总判据 | 90 PASS（07 章后） | 124 PASS / 0 FAIL（四层占 34 条） |
+| `Project/check.sh` 总判据 | 90 PASS（07 章后） | 124 PASS / 0 FAIL（四层占 34 条） |
 | 层表 | 6 层（三个空壳） | 7 层（config/ui/page/business 有实现） |
 | 交付源码 | — | 四层 13 文件 1280 行（含 items 两程序） |
 | 端到端链 | 无 | 回放 9 个事件：点击执行命令、两页切换、q 退出 |

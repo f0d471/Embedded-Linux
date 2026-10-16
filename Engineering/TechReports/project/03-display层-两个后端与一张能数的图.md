@@ -144,7 +144,7 @@ static unsigned int pack_field(unsigned int c8, const struct disp_field *f)
 `length` 为 8 时右移 0 位，所以 32 位色和 16 位色走同一个公式。
 这一点在这块板子上不是理论问题：插上 HDMI 显示器时，驱动会读显示器的 EDID
 然后自己把模式从 1024x600x32 改成 1280x720x16，dmesg 里一行日志都不留
-（[05 篇教程](../../../knowledge/tutorials/01_应用编程/05_Framebuffer应用编程.md) 6.2 节有实测）。
+（[05 篇教程](../../../Knowledge/tutorials/01_应用编程/05_Framebuffer应用编程.md) 6.2 节有实测）。
 按位段算的程序两种模式都对，而且不用重新编译。
 
 写内存那一步必须按 bpp 分支，因为"一次写几个字节"写在指针类型里，没法用变量表达：
@@ -520,7 +520,7 @@ fb 后端失败路径的系统调用序列（`DISP_FB=/dev/null`，在开发机�
 画到一半的画面会被扫描出去。等 ui 层开始重画整块区域时再处理。
 
 **font 层的接口还没对。** 第 04 章的字体层要按 `0x00RRGGBB` 的约定调
-`disp_put_pixel` 画字模，两边的规格在 [06 篇教程](../../../knowledge/tutorials/01_应用编程/06_文字显示.md)
+`disp_put_pixel` 画字模，两边的规格在 [06 篇教程](../../../Knowledge/tutorials/01_应用编程/06_文字显示.md)
 3.4 节写了，但还没有一行代码对接过。
 
 **切换显示后端的功能没有。** 链表和按名字查找都已经在了，

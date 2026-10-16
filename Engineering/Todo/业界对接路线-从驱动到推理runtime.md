@@ -4,7 +4,7 @@
 以及如果不能，要补什么。**
 
 它和同目录的 [`项目路线图-对齐电子产品量产工具.md`](项目路线图-对齐电子产品量产工具.md)
-分工不同：那一份回答"`project/` 这棵树往哪长"，是仓内的施工图；
+分工不同：那一份回答"`Project/` 这棵树往哪长"，是仓内的施工图；
 这一份回答"这棵树长成了之后，对外值多少钱"，是仓外的对接图。
 两份文件的第一期有交集，交集处在第四节写明。
 
@@ -67,7 +67,7 @@
 
     一期  IMX6ULL 上写真正的内核驱动 + Buildroot 根文件系统
           目的：拿门票。把第一节表里三个"没有"消掉
-          周期：约 3 周   落点：本仓 knowledge/labs/ 与 project/
+          周期：约 3 周   落点：本仓 Knowledge/labs/ 与 Project/
 
     二期  自研 SoC 跑起 Linux，GEMM 加速器做成设备树节点 + 驱动
           目的：差异化。这是别人没有的项目
@@ -123,9 +123,9 @@ LED 只能验到 GPIO 和字符设备，练不到阻塞读。
           不用 Yocto：Buildroot 一两天能上手，Yocto 太重，
           而 JD 里两者是并列出现的，先拿下便宜的那个
 
-    刀 7  接进 project/
+    刀 7  接进 Project/
           量产工具那一格 ap3216c 按钮，真的去读这个驱动
-          依赖：project/ 的 display 与 input 层要先落地（第 03、05 章）
+          依赖：Project/ 的 display 与 input 层要先落地（第 03、05 章）
           所以这一刀排在最后，且可能跨到十月
 
 ### 4.3 判据
@@ -145,9 +145,9 @@ LED 只能验到 GPIO 和字符设备，练不到阻塞读。
 | 8 | rmmod 后 `/dev/` 下节点消失且 `lsmod` 无残留 | 漏掉一个 cdev_del，rmmod 应报错或 oops |
 | 9 | Buildroot 出的 rootfs 里驱动自动加载 | 从 package 里去掉 modules 安装步骤 |
 
-判据 1 到 8 用一个脚本自动跑，形状照 `project/check.sh`：
+判据 1 到 8 用一个脚本自动跑，形状照 `Project/check.sh`：
 每组正判据配一次注错见红，输出 PASS/FAIL 计数。
-脚本落点 `knowledge/labs/08_i2c_driver/check.sh`（章号待定，见 4.4）。
+脚本落点 `Knowledge/labs/08_i2c_driver/check.sh`（章号待定，见 4.4）。
 
 **数字都要实跑。** 上表里没有写任何具体数值，因为一条都还没跑过。
 做完之后回来把实测值补进来，别照抄任何博客。
@@ -166,7 +166,7 @@ LED 只能验到 GPIO 和字符设备，练不到阻塞读。
 应用编程后面几章（06 网络、07 多线程）在 ysyx 和 SoC 仓已有等价经验，
 不是瓶颈，可以边做驱动边补。
 
-`knowledge/labs/` 目录编号按教程章号走，这一期先占 `knowledge/labs/08_i2c_driver/`。
+`Knowledge/labs/` 目录编号按教程章号走，这一期先占 `Knowledge/labs/08_i2c_driver/`。
 
 ## 五、两条顺手做的快路
 
@@ -240,4 +240,4 @@ LED 只能验到 GPIO 和字符设备，练不到阻塞读。
     [ ] 刀 4 中断与阻塞读
     [ ] 刀 5 mmap
     [ ] 刀 6 Buildroot
-    [ ] 刀 7 接进 project/
+    [ ] 刀 7 接进 Project/

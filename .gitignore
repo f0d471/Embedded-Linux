@@ -3,59 +3,59 @@ build/
 *.d
 .*.d
 
-# sources/ 是原始资料库：内容一律不入库，只有资料地图 README 入库。
-sources/*
-!sources/README.md
+# Sources/ 是原始资料库：内容一律不入库，只有资料地图 README 入库。
+Sources/*
+!Sources/README.md
 
-# knowledge/labs/ 下的编译产物：由源码现场编出来，不入库。
+# Knowledge/labs/ 下的编译产物：由源码现场编出来，不入库。
 # 上板的命令与输出直接写回教程，不另存原始记录。
-knowledge/labs/**/hello_x86
-knowledge/labs/**/hello_arm_dynamic
-knowledge/labs/**/hello_arm_static
-knowledge/labs/**/*.gz
-knowledge/labs/**/*.tar
+Knowledge/labs/**/hello_x86
+Knowledge/labs/**/hello_arm_dynamic
+Knowledge/labs/**/hello_arm_static
+Knowledge/labs/**/*.gz
+Knowledge/labs/**/*.tar
 
 # 03 章（Makefile）实验目录：只收源码与 Makefile，产物（*.o .*.d app、
 # 各层 built-in.o）由 make 重建。mini_proj/proj 两个工程都走这条白名单。
-knowledge/labs/03_makefile/**/*
-!knowledge/labs/03_makefile/**/
-!knowledge/labs/03_makefile/**/*.c
-!knowledge/labs/03_makefile/**/*.h
-!knowledge/labs/03_makefile/**/Makefile
-!knowledge/labs/03_makefile/**/*.md
+Knowledge/labs/03_makefile/**/*
+!Knowledge/labs/03_makefile/**/
+!Knowledge/labs/03_makefile/**/*.c
+!Knowledge/labs/03_makefile/**/*.h
+!Knowledge/labs/03_makefile/**/Makefile
+!Knowledge/labs/03_makefile/**/*.md
 
 # 04 章（文件 IO）上板测试包：由教程里的命令重建。
-knowledge/labs/04_file_io/board/
+Knowledge/labs/04_file_io/board/
 
-# knowledge/labs/00_basics/ 下一律只收源码和脚本，编译产物全部由各目录的 check.sh 重建。
+# Knowledge/labs/00_basics/ 下一律只收源码和脚本，编译产物全部由各目录的 check.sh 重建。
 # 用白名单而不是逐个列举产物名：列举漏一个就会把二进制提交进去。
-knowledge/labs/00_basics/**/*
-!knowledge/labs/00_basics/**/
-!knowledge/labs/00_basics/**/*.c
-!knowledge/labs/00_basics/**/*.h
-!knowledge/labs/00_basics/**/*.sh
-!knowledge/labs/00_basics/**/*.md
+Knowledge/labs/00_basics/**/*
+!Knowledge/labs/00_basics/**/
+!Knowledge/labs/00_basics/**/*.c
+!Knowledge/labs/00_basics/**/*.h
+!Knowledge/labs/00_basics/**/*.sh
+!Knowledge/labs/00_basics/**/*.md
 
-# knowledge/labs/05_framebuffer/ 同样用白名单：假显存 .raw、截屏 .png、上板包都由教程里的命令重建。
-knowledge/labs/05_framebuffer/**/*
-!knowledge/labs/05_framebuffer/**/
-!knowledge/labs/05_framebuffer/**/*.c
-!knowledge/labs/05_framebuffer/**/*.h
-!knowledge/labs/05_framebuffer/**/*.sh
-!knowledge/labs/05_framebuffer/**/*.py
-!knowledge/labs/05_framebuffer/**/*.md
+# Knowledge/labs/05_framebuffer/ 同样用白名单：假显存 .raw、截屏 .png、上板包都由教程里的命令重建。
+Knowledge/labs/05_framebuffer/**/*
+!Knowledge/labs/05_framebuffer/**/
+!Knowledge/labs/05_framebuffer/**/*.c
+!Knowledge/labs/05_framebuffer/**/*.h
+!Knowledge/labs/05_framebuffer/**/*.sh
+!Knowledge/labs/05_framebuffer/**/*.py
+!Knowledge/labs/05_framebuffer/**/*.md
 
 # 01 章（Hello）实验目录：只收源码，产物（hello_x86/hello_arm_* 等）由教程里的命令重建。
-knowledge/labs/01_hello/**/*
-!knowledge/labs/01_hello/**/
-!knowledge/labs/01_hello/**/*.c
-!knowledge/labs/01_hello/**/*.md
+Knowledge/labs/01_hello/**/*
+!Knowledge/labs/01_hello/**/
+!Knowledge/labs/01_hello/**/*.c
+!Knowledge/labs/01_hello/**/*.md
 
 # 02 章（GCC）实验目录：只收源码，产物（main.o/libsub.*/test_* 等）由教程里的命令重建。
 # big1/big2（.bss 对照，fundamentals/01_ELF与程序加载 第四节用）是这一规则的两个名字。
-knowledge/labs/02_gcc/**/*
-!knowledge/labs/02_gcc/**/
-!knowledge/labs/02_gcc/**/*.c
-!knowledge/labs/02_gcc/**/*.h
-!knowledge/labs/02_gcc/**/*.sh
-!knowledge/labs/02_gcc/**/*.md
+Knowledge/labs/02_gcc/**/*
+!Knowledge/labs/02_gcc/**/
+!Knowledge/labs/02_gcc/**/*.c
+!Knowledge/labs/02_gcc/**/*.h
+!Knowledge/labs/02_gcc/**/*.sh
+!Knowledge/labs/02_gcc/**/*.md

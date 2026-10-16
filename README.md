@@ -3,14 +3,14 @@
 从零开始学嵌入式 Linux，并把学到的知识落成一台可运行、可复测的设备。
 
 本仓是**完全自足的教程库**：不需要看原视频，不需要翻原书——原书和视频的知识
-已经提取进 knowledge/ 的教程里；外部源项目作为技术参照，一层一层搭进自己的
-project/。原始资料本身放在 sources/（不入 git），只作改写素材与最终兜底。
+已经提取进 Knowledge/ 的教程里；外部源项目作为技术参照，一层一层搭进自己的
+Project/。原始资料本身放在 Sources/（不入 git），只作改写素材与最终兜底。
 
 ## 一、仓库四部分
 
-    sources/       原始资料库（不入 git）。原书 PDF、26 集视频字幕、外部源项目的
-                   登记与章节对照，地图见 sources/README.md。
-    knowledge/     知识库，本仓的重心。
+    Sources/       原始资料库（不入 git）。原书 PDF、26 集视频字幕、外部源项目的
+                   登记与章节对照，地图见 Sources/README.md。
+    Knowledge/     知识库，本仓的重心。
       tutorials/     教程，按原书篇章与章号组织（第四篇应用编程 11 章、
                      第五篇驱动开发）。完整给出每条命令、每段代码，
                      手把手做实验，配判据。
@@ -18,14 +18,14 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
                      RISC-V/ysyx 搭桥），以及原书罗列型知识点的手册
                      （手册篇：GCC 选项、Makefile 语法……）。
       labs/          课程实验与判据脚本，按教程章号组织，check.sh 自动核对。
-    project/       自己的工程：网络视频终端（路线图见 Engineering/Todo）。
+    Project/       自己的工程：网络视频终端（路线图见 Engineering/Todo）。
       七层注册链表框架（display/input/font/ui/page/config/business）+ items
       测试项，check.sh 三套件 124 条判据。
     Engineering/   工程文档：TechReports（每个工作点一章，六节固定）/
                    Todo / Bugs。体例照搬 Loongarch_NPU_SoC 与 Efinix 两仓。
 
-协作规则见 [AGENTS.md](AGENTS.md)；knowledge 的体例唯一出处是
-[knowledge/README.md](knowledge/README.md)；"提交即更新文档"的对照表在
+协作规则见 [AGENTS.md](AGENTS.md)；Knowledge 的体例唯一出处是
+[Knowledge/README.md](Knowledge/README.md)；"提交即更新文档"的对照表在
 [Engineering/README.md](Engineering/README.md)。
 
 ## 二、汲取路线
@@ -38,7 +38,7 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
               只汲取架构思想与工程方法，禁止复制其代码与文档进仓、禁止上传）
               落点：Engineering/Todo/质检业务嫁接-inspect层与产品化.md（Q 刀）
 
-素材对照（原书 11 章框架、视频分集与字幕、各章源码目录）全部在 sources/README.md。
+素材对照（原书 11 章框架、视频分集与字幕、各章源码目录）全部在 Sources/README.md。
 
 ## 三、开发板资源（决定哪些实验能做）
 
@@ -64,8 +64,8 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
 ## 四、环境策略
 
 日常开发在 WSL Ubuntu 里做，只有真正需要上板验证时才连板子。
-环境与判据的完整规则在 [project/doc/开发环境.md](project/doc/开发环境.md)
-与 [project/doc/验证流程.md](project/doc/验证流程.md)，先记三条：
+环境与判据的完整规则在 [Project/doc/开发环境.md](Project/doc/开发环境.md)
+与 [Project/doc/验证流程.md](Project/doc/验证流程.md)，先记三条：
 
     1. 第 1 阶段（应用编程）绝大部分实验在 WSL 里用 x86 gcc 跑通逻辑，
        交叉编译产物攒着，阶段末尾集中上板验一次；第 2 阶段（驱动开发）必须上板，
@@ -79,7 +79,7 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
 
     [x] 仓库重构（2026-10-16）：四部分骨架、CodeReading 删除、教程化路线立项
         排期与逐章状态见 Engineering/Todo/knowledge教程化路线.md
-    [ ] knowledge 教程化
+    [ ] Knowledge 教程化
         [x] 01_HelloWorld背后没那么简单（字幕 4_1×2 + PDF 141-142；3978104）
         [x] 02_GCC编译器的使用（字幕 4_2×2 + PDF 143-153；e87e848）
         [x] 03_Makefile的使用（字幕 4_3×7 + PDF 154-165；daea10c）
@@ -91,9 +91,9 @@ project/。原始资料本身放在 sources/（不入 git），只作改写素�
         [ ] 02_驱动开发（未开工，前置 = BSP 工具链与内核源码）
     [ ] project（现行终点 = 网络视频终端，刀 0 起步）
         量产工具旧路线已走完并归档（TechReports 06-09，判据 73 → 124）
-        判据基线：bash project/check.sh → TOTAL 124 PASS / 0 FAIL / 0 SKIP
+        判据基线：bash Project/check.sh → TOTAL 124 PASS / 0 FAIL / 0 SKIP
 
-labs 判据基线（WSL，2026-10-16 复核）：knowledge/labs/00_basics 十一套 +
+labs 判据基线（WSL，2026-10-16 复核）：Knowledge/labs/00_basics 十一套 +
 06_text 合计 323 PASS / 0 FAIL / 5 SKIP（04 篇 1 条：本机缺 x86 32 位头；
 08 篇 4 条：要 root）。
 
@@ -105,4 +105,4 @@ labs 判据基线（WSL，2026-10-16 复核）：knowledge/labs/00_basics 十一
 
     1. 引用代码位置时行号必须准。重新 grep -n '' <文件> 对一遍，不靠记忆。
     2. 文档里出现的 PASS 数、体积、行数、耗时，一律以本机或板上实测为准。
-       改完代码先跑 bash project/check.sh，拿到的数字再写进文档。
+       改完代码先跑 bash Project/check.sh，拿到的数字再写进文档。

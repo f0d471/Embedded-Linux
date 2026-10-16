@@ -162,12 +162,12 @@ FAIL  发送端发满 21 条原始记录: got [sent 21 records] want [sent 5 rec
 
 ## 五、结果
 
-测量方法：`wsl bash project/check.sh`；ARM 静态产物与 fixture 经串口上传
+测量方法：`wsl bash Project/check.sh`；ARM 静态产物与 fixture 经串口上传
 （整文件 SHA-256 对账）；板上验证经调试串口完成。
 
 | 测量项 | 改动前 | 本轮后 |
 |---|---|---|
-| `project/check.sh` 总判据 | 73 PASS（05 章后） | 83 PASS / 0 FAIL（netinput 占 10 条） |
+| `Project/check.sh` 总判据 | 73 PASS（05 章后） | 83 PASS / 0 FAIL（netinput 占 10 条） |
 | [15] 组连续稳定性 | 首版间歇红（4.2） | 修后连跑三遍全绿 |
 | input 层 provider 数 | 2（evdev、replay） | 3（+netinput） |
 

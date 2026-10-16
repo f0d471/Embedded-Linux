@@ -2,7 +2,7 @@
 
 ## 一、动机
 
-font 层（第 04 章）交付后，`project/` 能在 framebuffer 上画字。网络视频终端的
+font 层（第 04 章）交付后，`Project/` 能在 framebuffer 上画字。网络视频终端的
 ui/page 两层（路线图刀 9）要用 USB 鼠标操作预览页、回放页、设置页，它们需要的
 输入是一句完整的话："指针在 (42,21)，左键按着"。Linux 输入子系统给用户态的却是
 一条条 `type/code/value` 记录：相对位移、按钮翻转、绝对坐标各是独立记录，直到
@@ -244,12 +244,12 @@ screen = (value' - min) * (limit - 1) / (max - min)
 
 ## 五、结果
 
-测量方法：`wsl bash project/check.sh`；ARM 静态 `input_test` 加同一份回放文件
+测量方法：`wsl bash Project/check.sh`；ARM 静态 `input_test` 加同一份回放文件
 经串口上传、整文件 SHA-256 对账；板上实验经串口完成，不向设备节点注入任何事件。
 
 | 测量项 | 改动前 | 本轮后 |
 |---|---|---:|
-| `project/check.sh` 总判据 | 65 PASS（04 章后） | 73 PASS / 0 FAIL / 0 SKIP（input 占 8 条） |
+| `Project/check.sh` 总判据 | 65 PASS（04 章后） | 73 PASS / 0 FAIL / 0 SKIP（input 占 8 条） |
 | input 层交付源码 | 0 行 | input/ 五个文件共 631 行 |
 | 回放语义 x86 与 ARM | 未验 | 同一文件输出逐行相同 |
 | ASan（回放单测） | 未跑 | 无 sanitizer 报告 |
