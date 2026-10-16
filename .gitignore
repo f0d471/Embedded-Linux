@@ -24,6 +24,14 @@ Knowledge/labs/03_makefile/**/*
 !Knowledge/labs/03_makefile/**/Makefile
 !Knowledge/labs/03_makefile/**/*.md
 
+# 04 章（文件 IO）实验目录：只收源码，产物（o/wp/hole/buf/pipe_rw/cp_*/
+# mycopy/csvproc 与 *.d、board/ 测试包）由教程里的命令重建。
+Knowledge/labs/04_file_io/**/*
+!Knowledge/labs/04_file_io/**/
+!Knowledge/labs/04_file_io/**/*.c
+!Knowledge/labs/04_file_io/**/*.sh
+!Knowledge/labs/04_file_io/**/*.md
+
 # 04 章（文件 IO）上板测试包：由教程里的命令重建。
 Knowledge/labs/04_file_io/board/
 

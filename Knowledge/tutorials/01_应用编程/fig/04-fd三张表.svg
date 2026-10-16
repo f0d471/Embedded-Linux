@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="560" viewBox="0 0 1240 560" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <rect x="0" y="0" width="1240" height="560" fill="#ffffff"/>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <!-- 第 1 张表:进程的 fd 数组 -->
+  <text x="60" y="40" font-size="14" fill="#555555">第 1 张表：进程的 fd 数组（当前进程 task_struct 里）</text>
+  <g font-size="14" text-anchor="middle">
+    <rect x="60" y="60"  width="120" height="36" fill="#f5f5f5" stroke="#999999"/><text x="120" y="84" fill="#777777">0 stdin</text>
+    <rect x="60" y="96"  width="120" height="36" fill="#f5f5f5" stroke="#999999"/><text x="120" y="120" fill="#777777">1 stdout</text>
+    <rect x="60" y="132" width="120" height="36" fill="#f5f5f5" stroke="#999999"/><text x="120" y="156" fill="#777777">2 stderr</text>
+    <rect x="60" y="168" width="120" height="36" fill="#ffffff" stroke="#000000" stroke-width="1.4"/><text x="120" y="192" fill="#000000">3</text>
+    <rect x="60" y="204" width="120" height="36" fill="#ffffff" stroke="#000000" stroke-width="1.4"/><text x="120" y="228" fill="#000000">4</text>
+    <rect x="60" y="240" width="120" height="36" fill="#ffffff" stroke="#1565c0" stroke-width="1.6"/><text x="120" y="264" fill="#1565c0">5 = dup(3)</text>
+  </g>
+  <text x="120" y="306" font-size="11.5" text-anchor="middle" fill="#666666">0/1/2 是 shell 经 fork</text>
+  <text x="120" y="322" font-size="11.5" text-anchor="middle" fill="#666666">继承来的终端</text>
+
+  <!-- 第 2 张表:struct file -->
+  <text x="520" y="40" font-size="14" fill="#555555">第 2 张表：struct file（"这一次打开"，每 open 一次新建一份）</text>
+  <rect x="520" y="150" width="250" height="96" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="645" y="175" font-size="14" text-anchor="middle" fill="#000000">struct file A</text>
+  <text x="645" y="197" font-size="12" text-anchor="middle" fill="#666666">f_pos = 1（读过一个字节）</text>
+  <text x="645" y="217" font-size="12" text-anchor="middle" fill="#666666">f_flags = O_RDONLY</text>
+  <text x="645" y="237" font-size="12" text-anchor="middle" fill="#666666">f_op = ext4 的读写函数表</text>
+
+  <rect x="520" y="290" width="250" height="96" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="645" y="315" font-size="14" text-anchor="middle" fill="#000000">struct file B</text>
+  <text x="645" y="337" font-size="12" text-anchor="middle" fill="#666666">f_pos = 0</text>
+  <text x="645" y="357" font-size="12" text-anchor="middle" fill="#666666">f_flags = O_RDONLY</text>
+  <text x="645" y="377" font-size="12" text-anchor="middle" fill="#666666">f_op = ext4 的读写函数表</text>
+
+  <!-- 第 3 张表:inode -->
+  <text x="1020" y="40" font-size="14" fill="#555555">第 3 张：inode（"这个文件"本身）</text>
+  <rect x="990" y="200" width="220" height="100" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="1100" y="228" font-size="14" text-anchor="middle" fill="#000000">inode(data.txt)</text>
+  <text x="1100" y="252" font-size="12" text-anchor="middle" fill="#666666">大小 8 字节 "ABCDEFGH"</text>
+  <text x="1100" y="272" font-size="12" text-anchor="middle" fill="#666666">权限 / 数据块位置</text>
+  <text x="1100" y="292" font-size="12" text-anchor="middle" fill="#666666">（链上没有文件名）</text>
+
+  <!-- 连线:open 两次(黑) -->
+  <line x1="180" y1="186" x2="516" y2="185" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="180" y1="222" x2="516" y2="326" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="330" y="172" font-size="12" fill="#333333">open 第 1 次 → 新建 A</text>
+  <text x="330" y="268" font-size="12" fill="#333333">open 第 2 次 → 新建 B（各算各的 f_pos）</text>
+
+  <!-- 连线:dup(蓝) -->
+  <path d="M 180 258 C 300 300, 380 210, 516 210" fill="none" stroke="#1565c0" stroke-width="1.8" marker-end="url(#arrB)"/>
+  <text x="255" y="292" font-size="12" fill="#1565c0">dup：不新建，直接指向 A</text>
+
+  <!-- struct file -> inode -->
+  <line x1="770" y1="198" x2="986" y2="238" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="770" y1="338" x2="986" y2="264" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 图例 -->
+  <line x1="60" y1="520" x2="100" y2="520" stroke="#000000" stroke-width="1.5"/>
+  <text x="106" y="525" font-size="12" fill="#333333">open：每格指向独立的一份 struct file</text>
+  <line x1="420" y1="520" x2="460" y2="520" stroke="#1565c0" stroke-width="1.8"/>
+  <text x="466" y="525" font-size="12" fill="#333333">dup / fork：多格指向同一份（共享 f_pos）</text>
+  <text x="60" y="470" font-size="12.5" fill="#333333">实验核对（正文 1.3 节）：读 fd3 一个字节后，fd3 与 fd5 的 f_pos 同时变 1，fd4 仍是 0；</text>
+  <text x="60" y="490" font-size="12.5" fill="#333333">/proc/&lt;pid&gt;/fdinfo 里三个 fd 指向同一文件、pos 分别为 1 / 0 / 1。</text>
+</svg>
