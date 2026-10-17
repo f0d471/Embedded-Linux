@@ -91,7 +91,7 @@ int main(int argc, char **argv)
 编译并跑四种形态：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 gcc -Wall argv_dump.c -o argv_dump
 #    ^^^^ 打开告警。它不改变产物,只把"编译器觉得你可能有错"的地方说出来
 
@@ -376,7 +376,7 @@ x86 上跑（build/host），产物给 ARM（target）**。
 ### 2.5 [做 L1] 同一份源码，两种机器码
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 gcc                     -O2 -Wall -Wextra hello.c -o hello_x86
 arm-linux-gnueabihf-gcc -O2 -Wall -Wextra hello.c -o hello_arm_dynamic
 #                       ^^ 指定输出文件名。不加 -o 产物一律叫 a.out
@@ -653,7 +653,7 @@ COM3/COM4 是笔记本蓝牙串口，与板子无关；认准 `CH9102`。COM 号
 Flow control 去掉。板子那一端的参数不用猜，让它自己念出来：
 
 ~~~powershell
-Set-Location E:\Workspace\embedded-linux
+Set-Location E:\Workspace\Embedded-linux
 .\Tools\serial-board.ps1 'uname -a; cat /proc/cmdline; ls /dev/ttymxc*'
 # 单引号里的整串是板上 shell 的命令。PowerShell 单引号不做任何替换,
 # ; * $? 都原样发过去,由板上的 bash 解释。
@@ -705,7 +705,7 @@ intr = ^C; quit = ^\; erase = ^?; kill = ^U; eof = ^D; ...
 二进制文件里这类字节有多少？在 WSL 里数一数：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 od -An -tu1 -v hello_arm_static | tr -s ' ' '\n' | awk 'NF { c[$1]++; n++ } END {
     printf "0x03=%d 0x04=%d 0x0d=%d 0x11=%d 0x13=%d 0x7f=%d\n", c[3], c[4], c[13], c[17], c[19], c[127]
     for (k in c) if (k+0 >= 128 || k+0 < 32 || k+0 == 127) bad += c[k]
@@ -777,7 +777,7 @@ CPU 只要有一次超过 2.8 ms 没来搬，FIFO 装满，后续字节直接丢
 **第一步，WSL 里编三个版本**（第 2、3 节已做过，这里是同一批产物）：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 ls -l hello_x86 hello_arm_dynamic hello_arm_static
 sha256sum hello_x86 hello_arm_dynamic hello_arm_static
 ```
@@ -796,7 +796,7 @@ sha256sum hello_x86 hello_arm_dynamic hello_arm_static
 目录更新）：
 
 ~~~powershell
-Set-Location E:\Workspace\embedded-linux
+Set-Location E:\Workspace\Embedded-linux
 .\Tools\serial-board.ps1 'rm -rf /tmp/ch01-board-repro'
 foreach ($n in 'hello_x86', 'hello_arm_dynamic', 'hello_arm_static') {
     .\Tools\serial-board.ps1 -Upload ".\Knowledge\labs\01_hello\$n" -Destination "/tmp/ch01-board-repro/$n"

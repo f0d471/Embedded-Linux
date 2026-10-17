@@ -57,7 +57,7 @@ Windows 上点一下按钮就能编译——Visual Studio 背后就是这一章�
 gcc 一条命令编完，但每个中间产物都能要下来——三个选项各对应一个停点：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 
 gcc -E hello.c -o hello.i    # 只预处理。-E 后产物仍是 C 文本
 gcc -S hello.i -o hello.s    # 只编译到汇编。产物是汇编助记符
@@ -163,7 +163,7 @@ hello_bad.c:20:1: error: unknown type name 'this'
 实验代码在 `Knowledge/labs/02_gcc/`。`main.c` 调用 `sub.c` 里定义的函数：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/02_gcc
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/02_gcc
 gcc -o test main.c sub.c
 ./test
 ```
@@ -217,7 +217,7 @@ include——编译 main.c 时编译器只需要知道 `sub_func` 长什么样�
 "在哪"是链接器的事，这正是 01 章 1.3 的分工）：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/02_gcc
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/02_gcc
 
 # 先各自编成 .o
 gcc -c -o main.o main.c
@@ -308,7 +308,7 @@ collect2: error: ld returned 1 exit status
 ### 4.1 [做 L1] 把 printf 的去向查出来
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 
 arm-linux-gnueabihf-nm hello_arm_dynamic | grep -i printf
 #  ^^ 列符号表:地址、类型字母、符号名。U = undefined(这个文件里没有它)
@@ -371,7 +371,7 @@ $ readelf -d hello_arm_dynamic | grep NEEDED
 ## 5 [做 L2] -static 的代价
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/01_hello
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello
 arm-linux-gnueabihf-gcc -static -O2 -Wall -Wextra hello.c -o hello_arm_static
 #                       ^^^^^^^ 注意位置:放在 -o 前面,
 #                       放到 -o 后面会被当成输出文件名(常见错误)
@@ -471,7 +471,7 @@ int main(void)
 是库函数；man 1 是命令）。编译与验证：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Knowledge/labs/02_gcc
+cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/02_gcc
 gcc -Wall hello_write.c -o hello_write
 ./hello_write
 strace -e trace=write ./hello_write

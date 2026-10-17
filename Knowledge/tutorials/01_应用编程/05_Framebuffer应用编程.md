@@ -78,7 +78,7 @@ root，不受影响）。
 ```bash
 mkdir -p ~/fblab && cd ~/fblab
 mknod fb_fake c 29 0            # c=字符设备 29=主设备号 0=次设备号
-L=/mnt/e/Workspace/embedded-linux/Knowledge/labs/05_framebuffer
+L=/mnt/e/Workspace/Embedded-linux/Knowledge/labs/05_framebuffer
 gcc -Wall -o fbopen $L/probe/fbopen.c
 ./fbopen fb_fake data.txt
 ```
@@ -561,7 +561,7 @@ f800: 100  ffff: 921500        合计 921600 = 1280 × 720
 判据跑法（WSL 无 fb0，用 mem 后端，与 check.sh 一致）：
 
 ```bash
-cd /mnt/e/Workspace/embedded-linux/Project
+cd /mnt/e/Workspace/Embedded-linux/Project
 export DISP_DEV=mem FONT_DEV=builtin INPUT_BACKEND=replay INPUT_REPLAY=/dev/null
 ./build/x86/product_tool        # display init OK / exit OK 在日志里
 bash check.sh                   # TOTAL 124 PASS / 0 FAIL / 0 SKIP(display 是 [1]~[10] 组)
