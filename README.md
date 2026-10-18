@@ -85,6 +85,7 @@ Project/。原始资料本身放在 Sources/（不入 git），只作改写素�
         [x] 03_Makefile的使用（字幕 4_3×7 + PDF 154-165；daea10c）
         [x] 04_文件IO（e2b6214）/ 05_Framebuffer应用编程（5cdcb91）/ 06_文字显示（95b83f4）
             ——四章字幕 8+1+6 集与 PDF 166-215 全部融合,附 4_6-3 字幕补齐复核
+        [x] 章首「前置基础」块（2026-10-18）：01～06 六篇补齐，规则见 Knowledge/README.md
         [ ] 07_输入系统 ～ 11_串口（待写；素材 = PDF + 源码 + TechReports 实测）
         [x] fundamentals 13 篇讲解篇（311 条判据）+ 2 篇手册篇
             （13_GCC常用选项手册 / 14_Makefile语法与函数手册，
