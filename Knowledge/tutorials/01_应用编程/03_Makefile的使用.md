@@ -20,7 +20,40 @@
 - 手册 [14 Makefile语法与函数手册](../../fundamentals/14_Makefile语法与函数手册.md)：
   语法与函数的罗列已提取出来，正文只讲原理与实验，用到去查
 
+**这一章在整机里的位置**：上接 02 篇（规则的原料就是那三条 gcc 命令），下接 04 篇
+（文件 IO 的实验与 Project 的构建）。它补的零件是"多文件构建、只重编该编的"；
+Project 的 Makefile 和 check.sh 的构建段就是它。
+
+**不学它会怎样**：手敲 gcc 必漏文件；改了头文件不重编，会编出一个能跑但行为
+错误的程序；加一个文件要改多处命令；`clean` 用 wildcard 写会留下孤儿 `.o`/`.d`
+（坑 6），下次全量重编还找不到原因。
+
 ## 0 这一章解决什么问题
+
+### 0.1 先看结果：三次 make
+
+本机实测（2026-10-16）：
+
+```text
+$ make
+gcc -c -o main.o main.c
+gcc -c -o math_ops.o math_ops.c
+gcc -c -o display.o display.c
+gcc -o app main.o math_ops.o display.o
+$ ./app
+1 + 2 = 3
+hello, makefile
+
+$ make
+make: 'app' is up to date.
+
+$ touch config.h && make          # 只重链接,这正是要治的病
+```
+
+第一次四行，第二次一句 `up to date`，碰一下头文件却只重链接。本章三层递进
+就是治最后这个病：模式规则解决"文件多"，自动依赖解决"头文件漏编"。
+
+### 0.2 这一章为什么存在
 
 一句话：**make 不理解 C，也不理解编译。它只会做一件事：比较两个文件的时间戳。**
 
@@ -48,6 +81,12 @@
 比的是 mtime 不是内容，所以 `touch` 一个没改的文件会触发重编、改了又改回来
 照样重编（这也是 ccache 存在的理由：它在 gcc 前面加一层内容哈希缓存，
 内容没变直接吐上次的 `.o`；你机器上已装）。
+
+### 0.3 怎么读这一章
+
+    只想先看见结果   0.1 → 1（规则）→ 4（mini_proj 五步）
+    完整学一遍       1 → 3 → 4；5 是通用 Makefile，6 对账 Project
+    选读，第二轮再看 5（通用递归构建，读懂内核要用）、6（落进 Project，可先跳）
 
 ---
 
@@ -423,7 +462,7 @@ clean:
 引擎 `proj/Makefile.build`：
 
 ```make
-# ⚠ 两个复现时真实踩到的坑,见 5.3
+# 注意 两个复现时真实踩到的坑,见 5.3
 .DEFAULT_GOAL := __build
 PHONY := __build
 
@@ -635,3 +674,27 @@ SRCS 换写死清单、去掉 `-MMD -MP`。手工在 project 里做一遍这两�
     坑 9  复现通用 Makefile 引擎:默认目标会被 include 进来的 Makefile 抢走
           (无限递归),规则写在变量过滤之前则子目录永远不被递归。
           钉 .DEFAULT_GOAL + 规则放过滤之后。                          (5.3)
+
+---
+
+## 9 这一章交出了什么
+
+现在能独立做到：
+
+- 写一条规则（目标、依赖、命令），并说得出 make 只比 mtime 不比内容
+- 用模式规则、自动变量、变量把一千条规则收成几条
+- 用 `-MMD -MP` 生成 `.d`，让头文件变化也触发正确重编
+- 按五步把 mini_proj 的 Makefile 长出来，每一步的判据都注错见红
+- 看懂 Project 的 Makefile，知道加一层、加一个文件要改哪里
+- 复现通用 Makefile 引擎，说清 `.DEFAULT_GOAL` 与规则位置两个坑
+
+还不能做：
+
+- autotools / CMake 这类构建生成器（不在本阶段）
+- 内核 Kbuild 的全貌（第 2 阶段）
+- 第三方库的 `configure` 交叉构建（第 06 篇、fundamentals/12）
+
+这一章在整机里的位置：它是 01、02 两篇的自动化。04～11 篇的实验都用它，
+Project 的构建系统与 check.sh 也从这里来（选择与代价见 TechReports 01）。
+
+下一章：[04 文件 IO](04_文件IO.md)。
