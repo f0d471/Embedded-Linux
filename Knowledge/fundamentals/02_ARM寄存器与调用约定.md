@@ -834,7 +834,7 @@ collect2: error: ld returned 1 exit status
 ## 十一、接下来
 
 - [03 ABI 与 sysroot](03_ABI与sysroot.md)：类型大小、结构体布局、替身根目录
-- [04 静态库、动态库与符号](04_静态库动态库与符号.md)：跨文件调用怎么落到 PLT/GOT
+- [05 静态库、动态库与符号](05_静态库动态库与符号.md)：跨文件调用怎么落到 PLT/GOT
 - 教程位置：01 篇 §2.1 用本篇解释 `hf` 为什么是硬约束；02 篇对比两种机器码时
   会再看到同一套寄存器
 - 官方规则边界：[AAPCS32](https://github.com/ARM-software/abi-aa/blob/main/aapcs32/aapcs32.rst)

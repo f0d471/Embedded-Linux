@@ -12,17 +12,17 @@
 **前置基础**：看懂本篇需要下面的底子。开读前扫一眼，缺哪条先补哪条；
 标了"用到再读"的可以等正文引用时再翻。
 
-- 先读 [09 驱动与设备文件](../../fundamentals/09_驱动与设备文件.md)：
+- 先读 [10 驱动与设备文件](../../fundamentals/10_驱动与设备文件.md)：
   设备节点、mknod、ENODEV 与 ENOTTY 的区别——§1.2 一开场就在用
 - 前一章 [04 文件 IO](./04_文件IO.md)：open/read/write/mmap/ioctl 是本篇的
   手脚，§2 起全程在用
 - 再往前 [01 HelloWorld 背后没那么简单](./01_HelloWorld背后没那么简单.md)：
   §4.4 的板测流程（交叉编译静态程序打 tar、串口上传、回读对账）与本篇同一条路
-- 用到再读 [07 虚拟内存与mmap](../../fundamentals/07_虚拟内存与mmap.md)：
+- 用到再读 [09 虚拟内存与mmap](../../fundamentals/09_虚拟内存与mmap.md)：
   §2.4 讲映射越界 SIGSEGV、显存多大≠能访问多少时引用
-- 用到再读 [10 显示原理](../../fundamentals/10_显示原理.md)：§1.3 的行场时序
+- 用到再读 [11 显示原理](../../fundamentals/11_显示原理.md)：§1.3 的行场时序
   与帧率、§5 的 EDID 和插线后改分辨率都指过去
-- 用到再读 [08 进程与信号](../../fundamentals/08_进程与信号.md)：
+- 用到再读 [12 进程与信号](../../fundamentals/12_进程与信号.md)：
   §4.2 给出厂 GUI 发 SIGTERM 请它优雅退出时引用
 
 **这一章在整机里的位置**：上接 04 篇（open/ioctl/mmap）与 01 篇的上板流程，下接
@@ -83,7 +83,7 @@ WSL 里没有可用的 framebuffer（1.2 节），所以电脑上用**假显存*
 
 屏幕每个像素要亮成什么颜色，必须有人每秒告诉它几十遍。干这件事的是 SoC 里的
 **显示控制器**（i.MX6ULL 上叫 LCDIF），工作只有一句话
-（[fundamentals/10](../../fundamentals/10_显示原理.md) 把它写成两个计数器）：
+（[fundamentals/11](../../fundamentals/11_显示原理.md) 把它写成两个计数器）：
 
 > 按固定节拍，从内存里某个地址开始，一个像素一个像素往后读，读到一帧末尾
 > 就回到开头。
@@ -95,7 +95,7 @@ WSL 里没有可用的 framebuffer（1.2 节），所以电脑上用**假显存*
 
 ### 1.2 [做 L1] /dev/fb0 是怎么找到驱动的
 
-先读 [fundamentals/09](../../fundamentals/09_驱动与设备文件.md)：设备文件里只存
+先读 [fundamentals/10](../../fundamentals/10_驱动与设备文件.md)：设备文件里只存
 类型和主、次设备号，主设备号选驱动、次设备号选实例；号码没人登记报 `ENXIO`，
 登记了没有实例报 `ENODEV`。把这件事放到 fb0 上看一遍。
 
@@ -177,13 +177,13 @@ WSL 里先验报错分支，再交叉编译 `-static` 上板（板上 glibc 2.30
 
 逐行读：
 
-- **smem_start=0x8c100000**：显存**物理地址**，应用拿不到（[fundamentals/07]），
+- **smem_start=0x8c100000**：显存**物理地址**，应用拿不到（[fundamentals/09]），
   留着对账。**smem_len=32 MiB**，是一屏（2457600 字节）的 13.65 倍，
   驱动分的比一屏大得多（2.4 节、坑 6 都用到）。
 - **line_length=4096**：一行 4096 字节 = 1024×4。
 - **bpp=32 + 位段 red=16/8 green=8/8 blue=0/8**：xRGB8888（图 5）。
 - **pixclock=20000 皮秒**：一拍 20 ns = 50 MHz；一行 1344 拍里只有 1024 拍是
-  画面，其余是空白和同步（[fundamentals/10] 第二节）。帧率 =
+  画面，其余是空白和同步（[fundamentals/11] 第二节）。帧率 =
   (1e12/pixclock) / htotal / vtotal。
 - `/dev/fb1`（id=FG）是前景叠加层，多了 `transp=24/8`，本章不用。
 - 回看 PDF 那句"固定参数很少用到"：行宽和显存大小都在 fix 里，**描点公式要
@@ -246,7 +246,7 @@ PDF 和 show_pixel.c 写的是 `y * (xres * bpp / 8)`，**假设每行恰好 xre
 
 实验 `Knowledge/labs/05_framebuffer/fakefb.c`（完整代码在 labs）：用普通文件
 冒充显存——`open`+`ftruncate` 撑到显存大小 + `mmap(MAP_SHARED)`（0 字节文件
-直接 mmap 再写会 SIGBUS，[fundamentals/07]），memset 0xff 清白，按板上同款
+直接 mmap 再写会 SIGBUS，[fundamentals/09]），memset 0xff 清白，按板上同款
 公式描点，close 后改动落回文件。判据全部用 `od` 数字节，不靠眼睛：
 
 ```bash
@@ -325,7 +325,7 @@ Segmentation fault                        exit=139
 - **x 越界不报错，点跑到下一行开头**——比崩溃更糟：程序"正常"，屏幕左缘
   多出一个点。
 - **y 越界撞上映射区终点，SIGSEGV**。**板上显存明明有 32 MiB 照样段错误**：
-  能访问多少看**你映射了多少**（[fundamentals/07] 页表）。
+  能访问多少看**你映射了多少**（[fundamentals/09] 页表）。
 
 所以描点函数要么自己查边界，要么约定调用者不越界——Project display 层的
 设计问题之一（第 6 节）。
@@ -469,7 +469,7 @@ pidof mxapp2                          # 必须等它是空的
 ```
 
 实测两次 stop 等 1 秒结果不同：一次 `[]`，一次还有 pid——**killall 只递
-SIGTERM 递到就返回，GUI 要自己收拾完才退出**（[fundamentals/08] 量过装了
+SIGTERM 递到就返回，GUI 要自己收拾完才退出**（[fundamentals/12] 量过装了
 处理函数的程序收到 SIGTERM 又活了 2 秒）。确认空了再画：
 
 ```text
@@ -540,7 +540,7 @@ i.MX6ULL 只有 LCDIF 一个显示控制器，输出并行 RGB；HDMI 是板上 
 `/sys/bus/i2c/devices/1-0039/cable_state` 是 `plugout`。
 
 **插线会发生什么，驱动源码说了算**：sii902x 检测到插线后读显示器的 EDID
-（显示器自存的"我支持哪些模式"表，[fundamentals/10] 第五节），选一个模式后
+（显示器自存的"我支持哪些模式"表，[fundamentals/11] 第五节），选一个模式后
 **把 framebuffer 的分辨率改掉**。板上实测（2026-09-14，GUI 保持停止）：
 
 ```text
@@ -702,7 +702,7 @@ maps 原样打出来。
 
 **顺带一提（跳过不影响）**：ysyx 的 NEMU VGA 是同一个形状（写 vmem、模拟器按
 节拍刷 SDL）；龙芯 SoC 的 DVI 扫描器就是本章那个"显示控制器"的 RTL 版，
-fbset 那行 timings 就是你当年写进寄存器的行场参数。[fundamentals/10] 第六节
+fbset 那行 timings 就是你当年写进寄存器的行场参数。[fundamentals/11] 第六节
 有完整对照。
 
 ---

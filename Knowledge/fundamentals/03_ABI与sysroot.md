@@ -332,7 +332,7 @@ $ readlink -f "$(arm-linux-gnueabihf-gcc -print-file-name=libc.so.6)"
 
 $ arm-linux-gnueabihf-gcc -print-file-name=libc.a
 /usr/arm-linux-gnueabihf/lib/libc.a
-    current ar archive          <- .a 是打包格式，见 04 篇
+    current ar archive          <- .a 是打包格式，见 05 篇
 ```
 
 **这条的教训**：`.so` 后缀不保证是 ELF。
@@ -649,7 +649,7 @@ compilation terminated.
 
 ## 十一、接下来
 
-- [04 静态库、动态库与符号](04_静态库动态库与符号.md)：`.a`/`.so`、符号类型、PLT/GOT
-- [05 系统调用与用户态/内核态](05_系统调用与用户内核态.md)：ABI 里"系统调用号放哪"
+- [05 静态库、动态库与符号](05_静态库动态库与符号.md)：`.a`/`.so`、符号类型、PLT/GOT
+- [07 系统调用与用户态/内核态](07_系统调用与用户内核态.md)：ABI 里"系统调用号放哪"
 - 教程位置：01 篇 §2.3 讲 `-hf` 与 sysroot；06 篇 §4 交叉构建第三方库时用本篇的
   `-I`/`-L`/`-l` 与 sysroot 模型

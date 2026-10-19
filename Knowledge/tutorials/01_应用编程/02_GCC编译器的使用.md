@@ -1,7 +1,7 @@
 # 02 GCC 编译器的使用
 
     原书    第四篇 第 2 章，PDF 143-153 页（145 页往后是选项清单，已提取为
-            fundamentals/13_GCC的选项.md，本章正文只讲原理）
+            fundamentals/04_GCC的选项.md，本章正文只讲原理）
     视频    4_2-1（17 分）、4_2-2（23 分）——知识已全部融入本篇，不必再看
     源码    $Q\04_嵌入式Linux应用开发基础知识\source\02_options\
     实验    Knowledge/labs/02_gcc/（本篇所有"本机实测"均为 2026-10-16 在
@@ -17,11 +17,11 @@
   `GLIBC_2.34 not found` 直接回指 01 章 4.4 的板上实测
 - 先读 [00 从源码到运行](../../fundamentals/00_从源码到运行.md)：本篇把四个
   步骤各自停在中间看产物（`-E`/`-S`/`-c`），四步叫不出名字读不动 §1
-- 用到再读 [04 静态库动态库与符号](../../fundamentals/04_静态库动态库与符号.md)：
+- 用到再读 [05 静态库动态库与符号](../../fundamentals/05_静态库动态库与符号.md)：
   §4.3 讲静态/动态库与 GLIBC 版本关卡时引用
-- 用到再读 [05 系统调用与用户内核态](../../fundamentals/05_系统调用与用户内核态.md)：
+- 用到再读 [07 系统调用与用户内核态](../../fundamentals/07_系统调用与用户内核态.md)：
   §6 讲 `printf` 不是系统调用、`write` 才是时引用
-- 清单 [13 GCC 的选项](../../fundamentals/13_GCC的选项.md)：
+- 清单 [04 GCC 的选项](../../fundamentals/04_GCC的选项.md)：
   选项清单已全部提出来，正文只讲原理，用到去查
 
 **这一章在整机里的位置**：上接 01 篇（一条命令编出三种产物），下接 03 篇（把命令
@@ -180,7 +180,7 @@ collect2 ... -o hello_x86 .../Scrt1.o .../crti.o .../crtbeginS.o
 `Scrt1.o / crti.o / crtbeginS.o / crtendS.o / crtn.o` 是 C 运行时的**启动文件**
 （你没写，链接器自己加的，负责在 main 之前铺好运行环境）；`-lc` 就是 libc。
 原书 2.7 节的 `-nostartfiles` / `-nostdlib` 选项就是把这些"自动塞入"关掉——
-编 bootloader 和内核时才用，详见 13 篇。
+编 bootloader 和内核时才用，详见 04 篇。
 
 ### 1.3 语法错误在哪一步被发现
 
@@ -353,7 +353,7 @@ collect2: error: ld returned 1 exit status
 ## 4 printf 到底是谁在干活
 
 `gcc -o hello hello.c` 编出来的 hello 里，**没有 printf 的代码**。
-（符号、PLT/GOT 的机制，[fundamentals/04](../../fundamentals/04_静态库动态库与符号.md)
+（符号、PLT/GOT 的机制，[fundamentals/05](../../fundamentals/05_静态库动态库与符号.md)
 有完整的反汇编实测。）
 
 ### 4.1 [做 L1] 把 printf 的去向查出来
@@ -500,7 +500,7 @@ bl  10cc4 <_IO_puts>          无格式符分支: gcc 把 printf 优化成了 pu
 要么直接用 write。上板调试这一条会救你好几次。
 
 （用户态怎么请内核干活、`svc` 做了什么，见
-[fundamentals/05](../../fundamentals/05_系统调用与用户内核态.md)；
+[fundamentals/07](../../fundamentals/07_系统调用与用户内核态.md)；
 跟 ysyx 的对照：ARM 的 `svc` 就是你实现过的 riscv `ecall`。）
 
 实验代码 `Knowledge/labs/02_gcc/hello_write.c`，不用 printf，用 write
@@ -566,13 +566,13 @@ $ grep -c svc  (静态版): 15
 
 原书 145-153 页把 GCC 的选项按类抄了一大份（总体/警告/调试/优化/链接器/
 目录选项），视频原话："这些内容是从以前我写的书里面截取出来的，有需要的人
-可以去看"。本仓把它整理成了可检索的选项清单（13 篇），用到再查：
+可以去看"。本仓把它整理成了可检索的选项清单（04 篇），用到再查：
 
-**[fundamentals/13 GCC 的选项](../../fundamentals/13_GCC的选项.md)**
+**[fundamentals/04 GCC 的选项](../../fundamentals/04_GCC的选项.md)**
 
 本章正文只用了 `-E -S -c -o -v -static -shared -fPIC -I -L -l` 十一个，
 已经覆盖日常九成场景；`-O2 -Wall -Wextra` 的完整语义、`-M` 依赖文件、
-`-nostartfiles` 这类进阶项都在 13 篇里。
+`-nostartfiles` 这类进阶项都在 04 篇里。
 
 ---
 
@@ -646,10 +646,10 @@ $ grep -c svc  (静态版): 15
 还不能做：
 
 - 把几十个文件的编译写成 Makefile（第 03 篇）
-- 完整交叉构建一个第三方库并部署到板子（fundamentals/12、第 06 篇）
+- 完整交叉构建一个第三方库并部署到板子（fundamentals/14、第 06 篇）
 - 编内核模块（第 2 阶段，要 BSP 工具链与内核源码）
 
 这一章在整机里的位置：它把 01 篇的一条命令拆成四步。03 篇把这几条命令写进
-Makefile，05/06 篇的第三方库（libjpeg-turbo、FreeType）靠这四步加参数才编得出来。
+Makefile；后面的第三方库（06 篇的 FreeType、刀 2 的 libjpeg-turbo）靠这四步加参数才编得出来。
 
 下一章：[03 Makefile 的使用](03_Makefile的使用.md)。

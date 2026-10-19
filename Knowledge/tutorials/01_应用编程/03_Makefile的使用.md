@@ -1,7 +1,7 @@
 # 03 Makefile 的使用
 
     原书    第四篇 第 3 章，PDF 154-165 页（语法与函数的罗列部分已提取为
-            fundamentals/14_make的语法与函数.md，本篇正文只讲原理与实验）
+            fundamentals/06_make的语法与函数.md，本篇正文只讲原理与实验）
     视频    4_3-1 到 4_3-7 共 7 集——知识已全部融入本篇，不必再看
     源码    $Q\04_...\source\04_2018Makefile（视频 4_3-2 起实际用的目录，不是
             口播的 03_Makefile）、05_general_Makefile（通用 Makefile）
@@ -17,7 +17,7 @@
   02 章 §2.2"分开编再链接"的那三条命令；没读它，§1 的规则在讲什么不知道
 - 再往前 [01 HelloWorld 背后没那么简单](./01_HelloWorld背后没那么简单.md)：
   02 章的前置同样适用（四步、退出码、交叉编译）
-- 清单 [14 make 的语法与函数](../../fundamentals/14_make的语法与函数.md)：
+- 清单 [06 make 的语法与函数](../../fundamentals/06_make的语法与函数.md)：
   语法与函数的罗列已提取出来，正文只讲原理与实验，用到去查
 
 **这一章在整机里的位置**：上接 02 篇（规则的原料就是那三条 gcc 命令），下接 04 篇
@@ -173,7 +173,7 @@ $ touch config.h && make        # 3.4 节之前,这条只会重链接,这正是�
 
 ### 2.2 变量：即时与延时
 
-四种赋值（完整语义见 14 篇）：
+四种赋值（完整语义见 06 篇）：
 
     :=    即时变量:定义那一刻求值,以后右边再变也不影响它
     =     延时变量:用到的时候才求值
@@ -298,7 +298,7 @@ hello, makefile                                # 改了宏输出也不变
 生成的 `c.d` 内容就是一行普通规则：`c.o: c.c config.h`。
 Makefile 用 `-include` 把全部 `.d` 读回来，依赖表就齐了。
 
-**原书勘误**（13 篇已记，这里复述一句）：PDF 136 写的
+**原书勘误**（04 篇已记，这里复述一句）：PDF 136 写的
 `gcc -M main.c abc.dep` 照敲报错，`-M` 的清单只打在 stdout；
 落到文件用 `-MD`。
 
@@ -580,8 +580,8 @@ sub3 debug only
 | 本章学的 | Project/Makefile 里的样子 |
 |---|---|
 | `?=`/`:=`（2.2） | `CROSS ?=` 与 `CC := $(CROSS)gcc` |
-| wildcard + foreach（2.2/14 篇） | `SRCS := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))` |
-| patsubst（14 篇） | `OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))` |
+| wildcard + foreach（2.2/06 篇） | `SRCS := $(wildcard *.c) $(foreach d,$(SUBDIRS),$(wildcard $(d)/*.c))` |
+| patsubst（06 篇） | `OBJS := $(patsubst %.c,$(BUILD)/%.o,$(SRCS))` |
 | 自动依赖（3） | 编译命令里的 `-MMD -MP` + `-include $(deps)` |
 | 函数 if/subst/firstword | `ARCH := $(if $(CROSS),$(firstword $(subst -, ,$(CROSS))),x86)` |
 
@@ -692,7 +692,7 @@ SRCS 换写死清单、去掉 `-MMD -MP`。手工在 project 里做一遍这两�
 
 - autotools / CMake 这类构建生成器（不在本阶段）
 - 内核 Kbuild 的全貌（第 2 阶段）
-- 第三方库的 `configure` 交叉构建（第 06 篇、fundamentals/12）
+- 第三方库的 `configure` 交叉构建（第 06 篇、fundamentals/14）
 
 这一章在整机里的位置：它是 01、02 两篇的自动化。04～11 篇的实验都用它，
 Project 的构建系统与 check.sh 也从这里来（选择与代价见 TechReports 01）。
