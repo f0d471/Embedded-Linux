@@ -7,7 +7,7 @@ framebuffer 并用独立脚本对显存逐像素对账，判据 52 条。上层�
 字节序列到码点的解码、码点到字形的选取、字形在基线上的摆放、覆盖率与背景色的合成。
 这四件事任何一件错了一环，症状都一样是屏幕上没字或位置错，所以每一环都要有能数的判据。
 
-课程资料给出了 FreeType 的最短调用链，它不能直接作为项目实现，四个缺陷都在源码里：
+FreeType 最短调用链的常见示例写法不能直接作为项目实现，四个缺陷都在源码里：
 `FT_Library` 与 `FT_Face` 从不释放；取位图按 `width` 算行跨度，遇到 FreeType 实际允许的
 负 `pitch` 与行尾填充就读错行；字形纵坐标不按 baseline 与 bearing 推导；灰度字节被当成
 最终颜色写进显存，抗锯齿信息全部丢失。它能在一个固定字体、固定画面上出现文字，
@@ -166,7 +166,7 @@ RGB565 每通道只有 5/6 位，很小的非零 alpha 在 8 位运算后可能�
 
 ### 3.5 构建与判据
 
-x86 走系统 `pkg-config freetype2`。ARM 从资料包的 FreeType 2.10.2 源码在
+x86 走系统 `pkg-config freetype2`。ARM 从官方 FreeType 2.10.2 源码包在
 `build/arm/deps/freetype/` 内隔离交叉构建静态库，头文件进 `CPPFLAGS`，静态库放在
 `LDLIBS`，用 `.installed` 戳文件把构建挂在 `font_freetype.o` 与最终链接之前：
 
@@ -185,9 +185,9 @@ FT_STAMP ──> font_freetype.o ; $(BIN) $(TESTS) ─order-only─> FT_STAMP
 
 ## 四、遇到的问题
 
-### 4.1 参考实现的资源生命周期没有闭合
+### 4.1 最短调用链示例的资源生命周期没有闭合
 
-**第一现场**（课程参考源码，原始记录丢失，按当时的阅读笔记还原）：全文件只有
+**第一现场**（最短调用链示例源码，原始记录丢失，按当时的阅读笔记还原）：全文件只有
 `FT_Init_FreeType` / `FT_New_Face`，退出路径没有对应释放。
 
 **解读** 短命单测不报告问题：进程退出时操作系统回收一切，ASan 的 leak 检测
@@ -195,7 +195,7 @@ FT_STAMP ──> font_freetype.o ; $(BIN) $(TESTS) ─order-only─> FT_STAMP
 每次切换漏一对 library/face，长跑累积。
 
 **定位** 阅读 `freetype_open` 的失败分支时发现：`FT_New_Face` 失败时 library
-已经创建，参考实现直接 return，半开资源无处归还。
+已经创建，示例写法直接 return，半开资源无处归还。
 
 **根因与修法** 清理集中进幂等的 `freetype_close()`，open 前（换字体）、open 失败、
 font 层退出三处复用。原判据没有覆盖到它：当时全部判据跑一次就退出，没有任何
@@ -216,7 +216,7 @@ font 层退出三处复用。原判据没有覆盖到它：当时全部判据跑
 **解读** 探针位图 `pitch=-6`、每行 4 有效像素 + 2 字节填充，逻辑首行放在内存后半。
 忽略负号按正方向取行，读到的覆盖率恰好整体颠倒，alpha 梯度对称所以八个像素全部变色。
 
-**定位** 参考实现按 `width` 逐行推进（`row = buffer + y * width`），在正 `pitch`
+**定位** 示例写法按 `width` 逐行推进（`row = buffer + y * width`），在正 `pitch`
 且无填充的位图上碰巧正确。FreeType 的 `pitch` 与 `width` 是两个独立字段，负值
 表示行序自底向上。
 
@@ -234,12 +234,12 @@ x86 的 `pkg-config` 结果带进了 ARM 链接，报主机路径下的动态库
 2.41，任何动态链接新库的产物都报 `GLIBC_2.38 not found`。
 
 **定位** 第 03 章的结论（静态链接 495 KB 产物）在 FreeType 上同样适用，于是从
-资料包源码隔离构建。第一次完整验收时判据脚本把 `Project/` 复制进 `/tmp` 再跑，
-Makefile 里的相对路径 `../../01_all_series_quickstart-master/...` 在副本里失效，
+官方源码包隔离构建。第一次完整验收时判据脚本把 `Project/` 复制进 `/tmp` 再跑，
+Makefile 里指向仓库外的相对路径在副本里失效，
 `missing tarball` 退出。
 
 **根因与修法** 依赖包路径改为环境变量展开成绝对路径（`check.sh` 里
-`FT_TARBALL=${FT_TARBALL:-/mnt/e/...}`），构建树、stage、stamp 全部放进
+`FT_TARBALL=${FT_TARBALL:-$HOME/deps/...}`），构建树、stage、stamp 全部放进
 `build/$(ARCH)`，两个架构互不污染。原判据为什么没覆盖到：旧判据脚本复制源码时
 没有任何第三方源码依赖，没有"副本里依赖包还能找到"这一条；补进总入口后复跑
 72/0/0（当时 input 层判据未合入）。

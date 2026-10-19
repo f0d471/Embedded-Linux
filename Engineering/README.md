@@ -1,10 +1,9 @@
 # Engineering：工程文档
 
-`Project/` 这棵代码树与 `Knowledge/` 教程改造的工程文档。体例照搬
-`Loongarch_NPU_SoC/Engineering/` 与 `Efinix/Engineering/`，读者是同一个人，没必要换一套写法。
+`Project/` 这棵代码树与 `Knowledge/` 教程改造的工程文档。
 
 和 `Knowledge/` 的关系：`Knowledge/tutorials/`、`Knowledge/fundamentals/` 是教材，
-读者是正在学这门课的人，按原书章节推进；本目录是工程文档，读者是要接手改
+读者是正在学这些知识的人，按教程章节推进；本目录是工程文档，读者是要接手改
 `Project/` 的人，按代码结构和开发时间线推进。同一件事在两边都出现是正常的，
 但落点不同：教程讲"这个知识点怎么学会"，这里讲"这段代码为什么长这样、
 这一行在算什么"。
@@ -17,7 +16,7 @@
 | [Todo/](Todo/) | 学习与项目的总路线；不再按工作点分文件 | 工作点完成后进 TechReports；总路线长期存在，删除条件见文件第十四节 |
 | [Bugs/](Bugs/) | 未修复的在产缺陷 | 修复后删除文件，内容并入 TechReports |
 
-`Todo/` 当前只有一份：[学习与项目路线](Todo/学习与项目路线.md)。两个学习来源的
+`Todo/` 当前只有一份：[学习与项目路线](Todo/学习与项目路线.md)。两个学习阶段的
 顺序、Knowledge 排期、Project 的层与刀、遗留账全在这一份里。工作点完成后按下面
 的流转规则进 TechReports，不再在这里另开文件。
 

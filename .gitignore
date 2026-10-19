@@ -3,10 +3,6 @@ build/
 *.d
 .*.d
 
-# Sources/ 是原始资料库：内容一律不入库，只有资料地图 README 入库。
-Sources/*
-!Sources/README.md
-
 # Knowledge/labs/ 下的编译产物：由源码现场编出来，不入库。
 # 上板的命令与输出直接写回教程，不另存原始记录。
 Knowledge/labs/**/hello_x86

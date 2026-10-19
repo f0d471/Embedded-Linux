@@ -40,10 +40,10 @@ ITEMS     := $(patsubst %.c,$(BUILD)/%,$(ITEM_SRCS))
 
 DEPS    := $(OBJS:.o=.d) $(TESTS:=.d) $(ITEMS:=.d)
 
-# FreeType: x86 走系统 pkg-config；ARM 从资料包源码隔离构建到当前架构产物树。
+# FreeType: x86 走系统 pkg-config；ARM 从官方源码包隔离构建到当前架构产物树。
 ifeq ($(ARCH),arm)
   FT_VERSION  := 2.10.2
-  FT_TARBALL  ?= ../../01_all_series_quickstart-master/04_嵌入式Linux应用开发基础知识/source/10_freetype/freetype-$(FT_VERSION).tar.xz
+  FT_TARBALL  ?= $(HOME)/deps/freetype-$(FT_VERSION).tar.xz
   FT_ROOT     := $(BUILD)/deps/freetype
   FT_SRC      := $(FT_ROOT)/freetype-$(FT_VERSION)
   FT_STAGE    := $(FT_ROOT)/stage

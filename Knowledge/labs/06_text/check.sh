@@ -3,9 +3,9 @@
 
 set -u
 cd "$(dirname "$0")" || exit 1
-Q=${Q:-/mnt/e/Workspace/01_all_series_quickstart-master}
-HZK=${HZK16:-$Q/04_嵌入式Linux应用开发基础知识/source/09_show_chinese/HZK16}
-FONT=${FONT_FILE:-$Q/04_嵌入式Linux应用开发基础知识/source/10_freetype/02_freetype_show_font/simsun.ttc}
+DEPS=${DEPS:-$HOME/deps}
+HZK=${HZK16:-$DEPS/HZK16}
+FONT=${FONT_FILE:-$DEPS/simsun.ttc}
 PASS=0; FAIL=0; SKIP=0
 ok() { PASS=$((PASS+1)); printf '  PASS  %s\n' "$1"; }
 no() { FAIL=$((FAIL+1)); printf '  FAIL  %s\n        期望 [%s]，实得 [%s]\n' "$1" "$3" "$2"; }

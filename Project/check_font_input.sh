@@ -19,8 +19,8 @@ cp -r "$SRC" "$W/project"
 cd "$W/project" || exit 1
 rm -rf build
 
-Q=${Q:-/mnt/e/Workspace/01_all_series_quickstart-master}
-FONT=${FONT_TEST_FILE:-$Q/04_嵌入式Linux应用开发基础知识/source/10_freetype/02_freetype_show_font/simsun.ttc}
+DEPS=${DEPS:-$HOME/deps}
+FONT=${FONT_TEST_FILE:-$DEPS/simsun.ttc}
 export DISP_DEV=mem
 export FONT_DEV=builtin
 

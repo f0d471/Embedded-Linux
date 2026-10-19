@@ -12,8 +12,8 @@ export FONT_DEV=builtin
 export INPUT_BACKEND=replay
 export INPUT_REPLAY=/dev/null
 
-# check_core.sh 会把 Project/ 复制进 /tmp；依赖包不能再用相对仓库路径。
-export FT_TARBALL=${FT_TARBALL:-/mnt/e/Workspace/01_all_series_quickstart-master/04_嵌入式Linux应用开发基础知识/source/10_freetype/freetype-2.10.2.tar.xz}
+# check_core.sh 会把 Project/ 复制进 /tmp；依赖包一律用绝对路径。
+export FT_TARBALL=${FT_TARBALL:-$HOME/deps/freetype-2.10.2.tar.xz}
 
 run_suite() {
 	local script=$1 output=$2
