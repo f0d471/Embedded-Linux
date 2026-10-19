@@ -1,13 +1,12 @@
-# project：网络视频终端（在建）
+# project：视觉终端（在建）
 
-在 100ASK_IMX6ULL Pro 上逐层长出的一台设备。现行终点是**网络视频终端**，
-路线图在 [../Engineering/Todo/项目路线图-网络视频终端.md](../Engineering/Todo/项目路线图-网络视频终端.md)
-（质检业务的嫁接见同目录 Q 刀文档）。量产工具旧路线已走完归档
-（TechReports 06-09）。
+在 100ASK_IMX6ULL Pro 上逐层长出的一台设备。目标是**视觉终端**：监看与质检
+两个业务共用一条流水线，路线图在
+[../Engineering/Todo/学习与项目路线.md](../Engineering/Todo/学习与项目路线.md)。
 
 当前状态：七层注册链表框架 + items 测试项全部有实现并上板验证过，判据基线
-**124 PASS / 0 FAIL / 0 SKIP**（`bash check.sh`）。终点新功能（video/net 层、
-推流、录像）从刀 0 起步，尚未开工。
+**124 PASS / 0 FAIL / 0 SKIP**（`bash check.sh`）。目标十一条层，还差
+video / net / inspect / record 四层；视频链路从刀 0 起步，尚未开工。
 
 为什么用"结构体 + 函数指针 + 链表注册"这个骨架：它是 Linux 子系统的通用形状
 （`file_operations`、`platform_driver` 同形），UVC 与 CSI 两个摄像头后端将来挂

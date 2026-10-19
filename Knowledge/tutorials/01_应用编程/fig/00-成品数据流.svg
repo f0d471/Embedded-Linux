@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="600" viewBox="0 0 1360 600" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <rect x="0" y="0" width="1360" height="600" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#555555"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1565c0"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="40" font-size="17" fill="#000000">成品怎么工作：摄像头进来，分三路出去</text>
+  <text x="40" y="64" font-size="12" fill="#666666">这是刀 1～刀 8 做完之后的样子；每一路对应后面的一两章</text>
+
+  <!-- 采集 -->
+  <rect x="40" y="190" width="200" height="90" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="140" y="219" font-size="14" text-anchor="middle" fill="#000000">USB 摄像头（UVC）</text>
+  <text x="140" y="241" font-size="11.5" text-anchor="middle" fill="#666666">芯片内部自己做 MJPEG 编码</text>
+  <text x="140" y="260" font-size="11.5" text-anchor="middle" fill="#666666">插上就认，不用写驱动</text>
+
+  <rect x="300" y="190" width="230" height="90" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="415" y="219" font-size="14" text-anchor="middle" fill="#000000">V4L2 + mmap</text>
+  <text x="415" y="241" font-size="11.5" text-anchor="middle" fill="#666666">每帧是一块内存，不拷贝</text>
+  <text x="415" y="260" font-size="11.5" text-anchor="middle" fill="#666666">/dev/video0（刀 1）</text>
+
+  <line x1="240" y1="235" x2="296" y2="235" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 主干 -->
+  <line x1="530" y1="235" x2="586" y2="235" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="590" y1="120" x2="590" y2="405" stroke="#000000" stroke-width="1.5"/>
+
+  <!-- 上支：推流 -->
+  <line x1="590" y1="120" x2="616" y2="120" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="620" y="80" width="240" height="80" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="740" y="108" font-size="14" text-anchor="middle" fill="#000000">HTTP multipart 推流</text>
+  <text x="740" y="130" font-size="11.5" text-anchor="middle" fill="#666666">不编码、不解码，直接转发</text>
+  <text x="740" y="149" font-size="11.5" text-anchor="middle" fill="#666666">（刀 5，第 08 章）</text>
+
+  <line x1="860" y1="120" x2="926" y2="120" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="930" y="80" width="200" height="80" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="1030" y="108" font-size="14" text-anchor="middle" fill="#000000">浏览器</text>
+  <text x="1030" y="130" font-size="11.5" text-anchor="middle" fill="#666666">输入板子 IP 就能看</text>
+  <text x="1030" y="149" font-size="11.5" text-anchor="middle" fill="#666666">不需要装任何软件</text>
+
+  <!-- 中支：本地显示 -->
+  <line x1="590" y1="290" x2="616" y2="290" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="620" y="250" width="240" height="80" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="740" y="278" font-size="14" text-anchor="middle" fill="#000000">libjpeg-turbo 解码</text>
+  <text x="740" y="300" font-size="11.5" text-anchor="middle" fill="#666666">只有本地显示才解</text>
+  <text x="740" y="319" font-size="11.5" text-anchor="middle" fill="#666666">（刀 2，用 fundamentals/12 的交叉构建法）</text>
+
+  <line x1="860" y1="290" x2="886" y2="290" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="890" y="250" width="190" height="80" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.6"/>
+  <text x="985" y="278" font-size="14" text-anchor="middle" fill="#0d47a1">PXP</text>
+  <text x="985" y="300" font-size="11.5" text-anchor="middle" fill="#0d47a1">唯一的图像硬件加速</text>
+  <text x="985" y="319" font-size="11.5" text-anchor="middle" fill="#0d47a1">转换 / 缩放 / 叠加</text>
+
+  <line x1="1080" y1="290" x2="1116" y2="290" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="1120" y="250" width="200" height="80" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="1220" y="278" font-size="14" text-anchor="middle" fill="#000000">fb0 显存</text>
+  <text x="1220" y="300" font-size="11.5" text-anchor="middle" fill="#666666">不接显示器：1024x600x32</text>
+  <text x="1220" y="319" font-size="11.5" text-anchor="middle" fill="#666666">插 HDMI：1280x720x16</text>
+
+  <!-- OSD -->
+  <rect x="890" y="380" width="190" height="70" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="985" y="406" font-size="13.5" text-anchor="middle" fill="#000000">font 层 OSD</text>
+  <text x="985" y="428" font-size="11.5" text-anchor="middle" fill="#666666">时间戳 / 帧率 / 光强（刀 4）</text>
+  <path d="M 1080 400 H 1160 V 330" fill="none" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- 录像 -->
+  <line x1="590" y1="405" x2="616" y2="405" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="620" y="380" width="240" height="70" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="740" y="406" font-size="13.5" text-anchor="middle" fill="#000000">录像存 eMMC</text>
+  <text x="740" y="428" font-size="11.5" text-anchor="middle" fill="#666666">掉电安全（刀 8，用第 04 篇的文件 IO）</text>
+
+  <!-- 控制 -->
+  <rect x="300" y="380" width="230" height="70" fill="#ffffff" stroke="#555555" stroke-width="1.3" stroke-dasharray="6 4"/>
+  <text x="415" y="406" font-size="13.5" text-anchor="middle" fill="#333333">串口命令 / 鼠标</text>
+  <text x="415" y="428" font-size="11.5" text-anchor="middle" fill="#666666">控制启停、切页（刀 6 / 刀 9）</text>
+  <line x1="415" y1="376" x2="415" y2="286" stroke="#555555" stroke-width="1.3" stroke-dasharray="6 4" marker-end="url(#arrG)"/>
+
+  <!-- 显示控制器 -->
+  <line x1="1220" y1="334" x2="1220" y2="376" stroke="#000000" stroke-width="1.5" marker-end="url(#arr)"/>
+  <rect x="1120" y="380" width="200" height="70" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="1220" y="406" font-size="13.5" text-anchor="middle" fill="#000000">LCDIF → SiI9022</text>
+  <text x="1220" y="428" font-size="11.5" text-anchor="middle" fill="#666666">读显存，变成 HDMI 信号</text>
+
+  <!-- 图例 -->
+  <line x1="40" y1="520" x2="80" y2="520" stroke="#000000" stroke-width="1.5"/>
+  <text x="88" y="525" font-size="12" fill="#333333">视频数据（会执行）</text>
+  <line x1="240" y1="520" x2="280" y2="520" stroke="#555555" stroke-width="1.3" stroke-dasharray="6 4"/>
+  <text x="288" y="525" font-size="12" fill="#333333">控制命令（虚线）</text>
+  <rect x="440" y="512" width="16" height="16" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.2"/>
+  <text x="464" y="525" font-size="12" fill="#333333">硬件加速（蓝框）</text>
+
+  <text x="40" y="570" font-size="12" fill="#666666">为什么不做 H.264：这颗芯片没有 VPU，A7 单核软编只有个位数帧率；MJPEG 由摄像头芯片编好，推流零编解码。</text>
+</svg>

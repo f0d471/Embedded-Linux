@@ -214,17 +214,21 @@ B 站视频：https://www.bilibili.com/video/BV1kk4y117Tu （仅存档，教程�
 
 项目分层（也是本仓 Project/ 已落地的分层）：
 display / input / font / ui / page / business。
-旧路线已按此走完并归档（见 Engineering/Todo/项目路线图-对齐电子产品量产工具.md）。
+旧路线已按此走完并归档（结论见 Engineering/Todo/学习与项目路线.md 第十一节）。
 
 ### 边缘视觉质检终端（第二来源，受软著保护）
 
 位置与约束见第一节。可汲取的部分：八层应用架构（application/core/camera/data/io/system/ui/cross）、
 CMake + rebuild.sh 三模式构建、deploy 打包、板卡适配方法论（`板子适配_100ASK/README.md`
 的换板差异表）、检测规则引擎思路、OTA/看门狗/守护进程的产品化四件套设计。
-**汲取落点在 Engineering/Todo/质检业务嫁接-inspect层与产品化.md（Q 刀）。**
+**汲取落点在 Engineering/Todo/学习与项目路线.md 第五节、第八节（Q1～Q7）。**
 
 ## 七、暂不涉及
 
+范围判定唯一出处是 Engineering/Todo/学习与项目路线.md 第四节。当前不纳入主线：
+
+    04a_嵌入式Linux应用开发实验班(快速入门)    QT / JsonRPC / 智能家居，技术栈不同
+    06_实战项目\02_QT工业物联网开发实战         QT / Modbus，同上
     07_驱动大全（只有 inline_assembly 一个目录）
     09_u-boot完全分析与移植
     10_裸机开发

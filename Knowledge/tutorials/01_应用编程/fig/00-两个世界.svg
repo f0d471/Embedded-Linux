@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="580" viewBox="0 0 1280 580" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <rect x="0" y="0" width="1280" height="580" fill="#ffffff"/>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+    </marker>
+    <marker id="arrG" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#555555"/>
+    </marker>
+  </defs>
+
+  <text x="40" y="40" font-size="17" fill="#000000">两个世界：电脑负责造，板子负责跑</text>
+
+  <!-- 电脑侧 -->
+  <rect x="40" y="70" width="480" height="400" fill="#ffffff" stroke="#888888"/>
+  <text x="60" y="96" font-size="14" fill="#555555">你的电脑：Windows + WSL Ubuntu（造）</text>
+
+  <rect x="70" y="120" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="280" y="145" font-size="14" text-anchor="middle" fill="#000000">编辑器：写 .c</text>
+  <text x="280" y="167" font-size="11.5" text-anchor="middle" fill="#666666">代码存在电脑上，不在板子上</text>
+
+  <rect x="70" y="198" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="280" y="223" font-size="14" text-anchor="middle" fill="#000000">交叉工具链 arm-linux-gnueabihf-gcc</text>
+  <text x="280" y="245" font-size="11.5" text-anchor="middle" fill="#666666">跑在电脑上，产出的机器码给 ARM</text>
+
+  <rect x="70" y="276" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="280" y="301" font-size="14" text-anchor="middle" fill="#000000">sysroot：板子的替身根目录</text>
+  <text x="280" y="323" font-size="11.5" text-anchor="middle" fill="#666666">链接时用的 libc / 头文件，从板子抄来的那份</text>
+
+  <rect x="70" y="354" width="420" height="62" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.6"/>
+  <text x="280" y="379" font-size="14" text-anchor="middle" fill="#0d47a1">产物：ARM ELF（静态链接）</text>
+  <text x="280" y="401" font-size="11.5" text-anchor="middle" fill="#0d47a1">一个能直接拷到板子上跑的文件</text>
+
+  <!-- 板子侧 -->
+  <rect x="760" y="70" width="480" height="400" fill="#ffffff" stroke="#888888"/>
+  <text x="780" y="96" font-size="14" fill="#555555">板子：100ASK_IMX6ULL Pro（跑）</text>
+
+  <rect x="790" y="120" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="1000" y="145" font-size="14" text-anchor="middle" fill="#000000">串口控制台 ttymxc0 115200</text>
+  <text x="1000" y="167" font-size="11.5" text-anchor="middle" fill="#666666">板子的"键盘和显示器"，只有这一条</text>
+
+  <rect x="790" y="198" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="1000" y="223" font-size="14" text-anchor="middle" fill="#000000">rootfs：板子上那套 Linux 用户态</text>
+  <text x="1000" y="245" font-size="11.5" text-anchor="middle" fill="#666666">glibc 2.30（2024-07-21 构建，2026-09-14 板上实测）</text>
+
+  <rect x="790" y="276" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="1000" y="301" font-size="14" text-anchor="middle" fill="#000000">内核：管 CPU、内存、外设</text>
+  <text x="1000" y="323" font-size="11.5" text-anchor="middle" fill="#666666">你的程序调 open/read/write 就是进它</text>
+
+  <rect x="790" y="354" width="420" height="62" fill="#ffffff" stroke="#000000" stroke-width="1.4"/>
+  <text x="1000" y="379" font-size="14" text-anchor="middle" fill="#000000">硬件：SoC / 512MB DDR3L / 4GB eMMC</text>
+  <text x="1000" y="401" font-size="11.5" text-anchor="middle" fill="#666666">LCDIF、SiI9022、网口、USB、AP3216C</text>
+
+  <!-- 两条通路 -->
+  <line x1="520" y1="385" x2="786" y2="385" stroke="#000000" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="639" y="368" font-size="12" text-anchor="middle" fill="#000000">串口：USB 线，现在唯一的门</text>
+  <text x="639" y="404" font-size="11" text-anchor="middle" fill="#666666">传文件要分块校验重传（01 篇第 4 节）</text>
+
+  <line x1="520" y1="250" x2="756" y2="250" stroke="#555555" stroke-width="1.5" stroke-dasharray="7 4" marker-end="url(#arrG)"/>
+  <text x="638" y="234" font-size="11.5" text-anchor="middle" fill="#555555">网线：第 08 章才接通</text>
+
+  <text x="40" y="520" font-size="13" fill="#000000">板子上没有键盘、没有显示器、没有编译器。交叉编译和串口，都是这张图逼出来的，不是习惯。</text>
+  <line x1="40" y1="540" x2="80" y2="540" stroke="#000000" stroke-width="1.8"/>
+  <text x="88" y="545" font-size="12" fill="#333333">实际通路（会执行）</text>
+  <line x1="280" y1="540" x2="320" y2="540" stroke="#555555" stroke-width="1.5" stroke-dasharray="7 4"/>
+  <text x="328" y="545" font-size="12" fill="#333333">现在还没接通的通路（虚线）</text>
+  <rect x="580" y="532" width="16" height="16" fill="#e3f2fd" stroke="#1565c0" stroke-width="1.2"/>
+  <text x="604" y="545" font-size="12" fill="#333333">蓝框：要送过串口的那一个文件</text>
+</svg>
