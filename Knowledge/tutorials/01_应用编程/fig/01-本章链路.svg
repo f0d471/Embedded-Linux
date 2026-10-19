@@ -33,10 +33,10 @@
   <!-- execve 四道关 -->
   <rect x="950" y="408" width="205" height="118" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
   <text x="1052" y="431" font-size="14.5" text-anchor="middle" fill="#000000">内核 execve 四道关（第 3 节）</text>
-  <text x="1052" y="453" font-size="11.5" text-anchor="middle" fill="#333333">① binfmt_script：是不是 #! 脚本</text>
-  <text x="1052" y="471" font-size="11.5" text-anchor="middle" fill="#333333">② binfmt_elf：头四字节 \x7fELF</text>
-  <text x="1052" y="489" font-size="11.5" text-anchor="middle" fill="#333333">③ elf_check_arch：e_machine 对不对</text>
-  <text x="1052" y="507" font-size="11.5" text-anchor="middle" fill="#333333">④ binfmt_misc：有没有人接管</text>
+  <text x="1052" y="453" font-size="11.5" text-anchor="middle" fill="#333333">① binfmt_misc：有无登记的规则</text>
+  <text x="1052" y="471" font-size="11.5" text-anchor="middle" fill="#333333">② binfmt_script：是不是 #! 脚本</text>
+  <text x="1052" y="489" font-size="11.5" text-anchor="middle" fill="#333333">③ binfmt_elf：头四字节 \x7fELF</text>
+  <text x="1052" y="507" font-size="11.5" text-anchor="middle" fill="#333333">④ elf_check_arch：e_machine</text>
 
   <!-- ===== 下场框 ===== -->
   <rect x="1210" y="118" width="140" height="72" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.5"/>
@@ -82,8 +82,8 @@
   <text x="1178" y="512" font-size="11" fill="#b71c1c">动态</text>
 
   <!-- x86 拷上板的对照路径(虚线红) -->
-  <path d="M 570 182 V 612 H 1206" fill="none" stroke="#c62828" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
-  <text x="620" y="604" font-size="11.5" fill="#b71c1c">把 x86 程序拷到板上跑——镜像实验，同一个错（第 3 节）</text>
+  <path d="M 610 182 V 400 H 690 V 612 H 1206" fill="none" stroke="#c62828" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
+  <text x="705" y="604" font-size="11.5" fill="#b71c1c">把 x86 程序拷到板上跑，同一个错（第 5.1 节）</text>
 
   <!-- ===== 图例 ===== -->
   <rect x="30" y="600" width="16" height="16" fill="#e8f5e9" stroke="#2e7d32" stroke-width="1.2"/>
