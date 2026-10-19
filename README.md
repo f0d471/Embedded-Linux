@@ -15,9 +15,9 @@ Project/。原始资料本身放在 Sources/（不入 git），只作改写素�
                      第五篇驱动开发）。完整给出每条命令、每段代码，
                      手把手做实验，配判据。01_应用编程 下另有 00 篇入口：
                      这台机器是什么、我们要造什么、11 章在整机的哪里。
-      fundamentals/  基础知识与查阅手册：教程的前置知识（讲解篇，对照
-                     RISC-V/ysyx 搭桥），以及原书罗列型知识点的手册
-                     （手册篇：GCC 选项、Makefile 语法……）。
+      fundamentals/  教程的前置知识与原文清单：一个名词一篇讲透，原书
+                     罗列型内容（GCC 选项、make 语法、标志位）完整存档；
+                     体例与索引见 fundamentals/README.md。
       labs/          课程实验与判据脚本，按教程章号组织，check.sh 自动核对。
     Project/       自己的工程：视觉终端（监看 + 质检两个业务）。
       现有七层注册链表框架（display/input/font/ui/page/config/business）
@@ -94,9 +94,8 @@ Project/。原始资料本身放在 Sources/（不入 git），只作改写素�
             ——四章字幕 8+1+6 集与 PDF 166-215 全部融合,附 4_6-3 字幕补齐复核
         [x] 章首「前置基础」块（2026-10-18）：01～06 六篇补齐，规则见 Knowledge/README.md
         [ ] 07_输入系统 ～ 11_串口（待写；素材 = PDF + 源码 + TechReports 实测）
-        [x] fundamentals 13 篇讲解篇（311 条判据）+ 2 篇手册篇
-            （13_GCC常用选项手册 / 14_Makefile语法与函数手册，
-             含原书勘误 2 条：gcc -M 落文件、-M 系真实行为）
+        [x] fundamentals 15 篇（单一套，不分讲解/手册；GCC 选项与 make 语法清单在内）
+            （含原书勘误 2 条：gcc -M 落文件、-M 系真实行为）
         [ ] 02_驱动开发（未开工，前置 = BSP 工具链与内核源码）
     [ ] project（目标 = 视觉终端：监看 + 质检；阶段 P1～P5 见路线文件）
         七层骨架 + items 已落地（量产工具旧路线，TechReports 06-09）
