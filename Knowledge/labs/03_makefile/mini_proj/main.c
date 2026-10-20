@@ -1,5 +1,5 @@
-/* 03 章 3.5 节 mini_proj：调用 add 和 print_banner。
- * 五步演进的最终形态（第 5 步，支持交叉编译）。
+/* 03 篇 mini_proj：调用 add 和 print_banner。
+ * Makefile 五步演进的实验工程,中间形态在 steps/ 下。
  */
 #include <stdio.h>
 #include "math_ops.h"

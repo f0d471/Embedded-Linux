@@ -1,11 +1,9 @@
-# mini_proj 的 Makefile —— 五步演进的第 5 步（最终形态）
-# 第 1 步 全部写死        四条编译规则 + 一条链接规则,一个变量都没有
-# 第 2 步 变量与模式规则   CC/CFLAGS 提成变量,四条编译规则塌缩成 %.o: %.c
-# 第 3 步 自动收集源文件   SRCS := $(wildcard *.c),加文件不改 Makefile
-# 第 4 步 头文件自动依赖   编译加 -MMD,结尾 -include 读回 .d
-# 第 5 步 交叉编译        CROSS ?= 空缺省,命令行传前缀
-#
-# 每一步的写法与验证见教程 03 篇 3.5 节,这里是五步全做完的样子。
+# mini_proj 的 Makefile,五步走完的样子:
+#   第 3 步 自动收集源文件   SRCS := $(wildcard *.c),加文件不改本文件
+#   第 4 步 头文件自动依赖   编译加 -MMD,结尾 -include 读回 .d
+#   第 5 步 交叉编译         CROSS ?= 空缺省,命令行传前缀
+# 第 0～2 步与中间形态在 steps/ 下,各自可用 make -f steps/stepN/Makefile 单独跑。
+# 每一步的来历见教程 03 篇第 1、3、4、5、6 节。
 
 CROSS   ?=
 CC      := $(CROSS)gcc

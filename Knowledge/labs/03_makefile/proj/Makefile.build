@@ -1,0 +1,63 @@
+# Makefile.build,递归引擎。
+# 每个目录被 "make -C <目录> -f $(TOPDIR)/Makefile.build" 调一次:
+#   1. include 当前目录的 Makefile,拿到 obj-y(文件与子目录)
+#   2. 先递归处理子目录(它们各自产出 built-in.o)
+#   3. 再用 ld -r 把本目录的 .o 和子目录的 built-in.o 合并成本目录的 built-in.o
+#
+# 两个复现时真实踩到的坑(教程 03 篇第 7.9 节):
+#   1. 默认目标必须显式钉死。本文件在 include Makefile 之前没有一条规则,
+#      不设 .DEFAULT_GOAL 的话,默认目标会被 include 进来的顶层 Makefile 的
+#      all 抢走,引擎变成重新调 start_recursive_build,无限递归。
+#   2. __build 规则必须写在 obj-y 拆分(过滤)之后:规则的依赖在读取那一刻
+#      就展开,写在前面时 $(subdir-y)/$(cur_objs) 还是空,子目录永远不会被递归。
+
+.DEFAULT_GOAL := __build
+PHONY := __build
+
+obj-y        :=
+subdir-y     :=
+EXTRA_CFLAGS :=
+
+CFLAGS := -I$(TOPDIR)/include
+
+include Makefile
+
+# obj-y 拆两半:带斜杠的是子目录,其余是本目录的 .o
+subdir-y     := $(filter %/, $(obj-y))
+subdir-y     := $(patsubst %/,%,$(subdir-y))
+subdir_objs  := $(filter %/, $(obj-y))
+subdir_objs  := $(patsubst %/,%/built-in.o, $(subdir_objs))
+cur_objs     := $(filter-out %/, $(obj-y))
+
+# 读回上一次编译留下的 .d(隐藏文件),把头文件依赖装进依赖图。
+# 首次编译 .d 还不存在,wildcard 过滤保证 include 不报错。
+dep_files := $(foreach f, $(cur_objs), .$(f).d)
+dep_files := $(wildcard $(dep_files))
+ifneq ($(dep_files),)
+  include $(dep_files)
+endif
+
+.PHONY: $(subdir-y)
+$(subdir-y):
+	$(MAKE) -C $@ -f $(TOPDIR)/Makefile.build
+
+# built-in.o:本目录 .o + 子目录 built-in.o 用 ld -r 可重定位合并
+built-in.o: $(cur_objs) $(subdir_objs)
+	$(LD) -r -o $@ $^
+
+# 编译规则:CFLAGS(全局) + EXTRA_CFLAGS(目录) + CFLAGS_<文件>(单文件)
+# -Wp,-MMD,.$@.d 边编译边把依赖写进隐藏的 .$@.d;-MP 给每个头文件补空规则
+%.o: %.c
+	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) $(CFLAGS_$@) -MP -Wp,-MMD,.$@.d -c -o $@ $<
+
+__build: $(subdir-y) built-in.o
+	@:
+
+.PHONY: $(PHONY)
+
+# built-in.o 依赖子目录的 built-in.o,而后者由 $(subdir-y) 那条规则进子目录造出来,
+# 两者之间没有写成依赖关系,只靠"先列 $(subdir-y)"的串行顺序。make -j 时
+# 两边并行,报 No rule to make target 'a/built-in.o'。整份串行。
+# 在顶层目录,include 进来的顶层 Makefile 已带这一行;这里这一行管的是
+# 子目录里还有子目录的情形(那时 include 的是子目录自己的 Makefile)。
+.NOTPARALLEL:

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="660" viewBox="0 0 960 660" font-family="Microsoft YaHei, sans-serif">
+  <rect x="0" y="0" width="960" height="660" fill="#ffffff"/>
+  <text x="30" y="26" font-size="15" fill="#000000">proj 的一次完整构建:递归下行,合并上行</text>
+
+  <defs>
+    <marker id="b1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000"/>
+    </marker>
+    <marker id="b2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f5fbf"/>
+    </marker>
+  </defs>
+
+  <!-- make[0] -->
+  <rect x="60" y="46" width="600" height="70" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="76" y="72" font-size="13" font-family="Consolas, monospace" fill="#000000">make   (读 proj/Makefile)</text>
+  <text x="76" y="94" font-size="12" font-family="Consolas, monospace" fill="#333333">1. all 的依赖先做 start_recursive_build,app 排在后面</text>
+
+  <!-- make[1] -->
+  <rect x="120" y="166" width="600" height="92" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="136" y="192" font-size="13" font-family="Consolas, monospace" fill="#000000">make[1] = make -f Makefile.build   (在 proj/ 里跑引擎)</text>
+  <text x="136" y="214" font-size="12" font-family="Consolas, monospace" fill="#333333">2. __build 的依赖: 子目录 a 和 built-in.o,先处理 a</text>
+  <text x="136" y="238" font-size="12" font-family="Consolas, monospace" fill="#333333">5. 回到本层后: gcc -c main.c sub.c</text>
+
+  <!-- make[2] -->
+  <rect x="180" y="308" width="600" height="110" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="196" y="334" font-size="13" font-family="Consolas, monospace" fill="#000000">make[2] = make -C a -f $(TOPDIR)/Makefile.build</text>
+  <text x="196" y="356" font-size="12" font-family="Consolas, monospace" fill="#333333">3. gcc -c sub2.c sub3.c   (-DDEBUG;sub3 另有 -DDEBUG_SUB3)</text>
+  <text x="196" y="378" font-size="12" font-family="Consolas, monospace" fill="#333333">4. ld -r -o built-in.o sub2.o sub3.o</text>
+  <text x="196" y="404" font-size="11" fill="#666666">本层产物交给上一层,本层任务结束</text>
+
+  <!-- make[1] 继续 -->
+  <rect x="120" y="468" width="600" height="60" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="136" y="492" font-size="12" font-family="Consolas, monospace" fill="#333333">6. ld -r -o built-in.o main.o sub.o a/built-in.o</text>
+  <text x="136" y="514" font-size="11" fill="#666666">子目录的 built-in.o 在这里被当作一个普通 .o 并进来</text>
+
+  <!-- 回到 make[0] -->
+  <rect x="60" y="578" width="600" height="52" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="76" y="610" font-size="13" font-family="Consolas, monospace" fill="#000000">7. gcc -o app built-in.o</text>
+
+  <!-- 实线: 进入下一层 / 顺序执行 -->
+  <line x1="360" y1="116" x2="360" y2="162" stroke="#000000" stroke-width="1.5" marker-end="url(#b1)"/>
+  <line x1="420" y1="258" x2="420" y2="304" stroke="#000000" stroke-width="1.5" marker-end="url(#b1)"/>
+  <line x1="420" y1="418" x2="420" y2="464" stroke="#000000" stroke-width="1.5" marker-end="url(#b1)"/>
+  <line x1="360" y1="528" x2="360" y2="574" stroke="#000000" stroke-width="1.5" marker-end="url(#b1)"/>
+
+  <!-- 虚线: 子 make 返回上一层 -->
+  <path d="M 180 386 C 90 386 90 240 116 240" fill="none" stroke="#1f5fbf" stroke-width="1.5" marker-end="url(#b2)"/>
+  <path d="M 120 496 C 50 496 50 100 56 100" fill="none" stroke="#1f5fbf" stroke-width="1.5" marker-end="url(#b2)"/>
+  <text x="40" y="320" font-size="11" fill="#1f5fbf" transform="rotate(-90 40 320)">子 make 退出,回到上一层</text>
+
+  <!-- 右侧产物 -->
+  <rect x="800" y="340" width="140" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="870" y="365" font-size="13" text-anchor="middle" font-family="Consolas, monospace" fill="#000000">a/built-in.o</text>
+  <rect x="800" y="478" width="140" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="870" y="503" font-size="13" text-anchor="middle" font-family="Consolas, monospace" fill="#000000">built-in.o</text>
+  <rect x="800" y="584" width="140" height="40" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="870" y="609" font-size="13" text-anchor="middle" font-family="Consolas, monospace" fill="#000000">app</text>
+  <line x1="780" y1="360" x2="796" y2="360" stroke="#000000" stroke-width="1.2" marker-end="url(#b1)"/>
+  <polyline points="870,380 870,440 640,440 640,464" fill="none" stroke="#000000" stroke-width="1.2" marker-end="url(#b1)"/>
+  <text x="650" y="458" font-size="11" fill="#333333">作为 ld -r 的输入</text>
+  <line x1="720" y1="498" x2="796" y2="498" stroke="#000000" stroke-width="1.2" marker-end="url(#b1)"/>
+  <line x1="660" y1="604" x2="796" y2="604" stroke="#000000" stroke-width="1.2" marker-end="url(#b1)"/>
+
+  <!-- 图例 -->
+  <line x1="60" y1="648" x2="105" y2="648" stroke="#000000" stroke-width="1.5"/>
+  <text x="113" y="652" font-size="11" fill="#333333">黑色:进入下一层、顺序执行、产物流向(数字是执行顺序)</text>
+  <line x1="460" y1="648" x2="505" y2="648" stroke="#1f5fbf" stroke-width="1.5"/>
+  <text x="513" y="652" font-size="11" fill="#1f5fbf">蓝色:子 make 退出,控制回到上一层</text>
+</svg>

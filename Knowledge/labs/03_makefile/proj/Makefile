@@ -1,5 +1,5 @@
-# 顶层 Makefile —— 通用 Makefile（内核那套递归构建）的教学复现
-# 设计思想（3.6 节）:
+# 顶层 Makefile,内核式递归构建的教学复现。
+# 设计思想(教程 03 篇第 7 节):
 #   1. 每个目录一份 Makefile,里面只用 obj-y 声明"编哪些文件、进哪些目录"
 #   2. 顶层一份 Makefile.build 当递归引擎,make -f 反复调它,一次处理一个目录
 #   3. 每个目录的 .o 用 ld -r 合并成 built-in.o,层层向上,最后链接成程序
@@ -21,14 +21,21 @@ obj-y += main.o
 obj-y += sub.o
 obj-y += a/          # 结尾带斜杠的项是子目录,引擎靠它区分文件与目录
 
-all: start_recursive_build
-	$(CC) -o $(TARGET) built-in.o
+# all 是动作目标,永远先启动递归;递归回来之后再按文件目标 app 决定要不要重链接
+all: start_recursive_build $(TARGET)
 
-# 规则文件不在本文件里:-f 显式指定引擎;引擎每个目录被调一次
+# 规则文件不在本文件里:-f 显式指定引擎;引擎对每个目录被调一次
 start_recursive_build:
 	$(MAKE) -f Makefile.build
+
+$(TARGET): built-in.o
+	$(CC) -o $@ $<
 
 clean:
 	rm -f $(shell find . -name '*.o') $(shell find . -name '.*.d') $(TARGET)
 
-.PHONY: clean
+.PHONY: all clean start_recursive_build
+
+# all 的两个依赖之间有先后:app 必须等递归把 built-in.o 更新完才能判断。
+# make -j 会把它们并行处理,app 先被判成"最新",于是漏掉重链接。整份串行。
+.NOTPARALLEL:
