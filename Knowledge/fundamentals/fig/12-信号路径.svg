@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+    <marker id="ard" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#666"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    .lb { font-size: 11px; fill: #333; }
+    rect.box { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.4; }
+    path.dash { fill: none; stroke: #666; stroke-width: 1.3; stroke-dasharray: 5,4; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="640" fill="#fff"/>
+  <text class="t" x="24" y="32">一个信号从产生到生效的完整路径</text>
+  <text class="s" x="24" y="54">检查发生在"内核送进程回用户态"的那一步；SIGKILL/SIGSTOP 是不查位图的例外。</text>
+
+  <!-- 来源 -->
+  <text class="h" x="30" y="86">三个来源</text>
+  <rect class="box" x="30" y="96" width="220" height="76"/>
+  <text class="h" x="44" y="118">别的进程</text>
+  <text class="code s" x="44" y="138">kill(pid, sig)</text>
+  <text class="s" x="44" y="156">权限不过 -> EPERM（第 4 节）</text>
+
+  <rect class="box" x="30" y="192" width="220" height="76"/>
+  <text class="h" x="44" y="214">内核因错自己发</text>
+  <text class="s" x="44" y="234">非法访存 -> SIGSEGV(11)</text>
+  <text class="s" x="44" y="252">映射越界 -> SIGBUS(7)</text>
+
+  <rect class="box" x="30" y="288" width="220" height="92"/>
+  <text class="h" x="44" y="310">键盘</text>
+  <text class="s" x="44" y="330">Ctrl+C = 字节 0x03</text>
+  <text class="s" x="44" y="348">行规程翻译成 SIGINT(2)</text>
+  <text class="s" x="44" y="366">stty -isig 可关掉（第 4 节）</text>
+
+  <path class="w" d="M250,134 L296,164" marker-end="url(#ar)"/>
+  <path class="w" d="M250,230 L296,220" marker-end="url(#ar)"/>
+  <path class="w" d="M250,330 L296,276" marker-end="url(#ar)"/>
+
+  <!-- 档案 -->
+  <rect class="box" x="298" y="120" width="300" height="210"/>
+  <text class="h" x="312" y="144">目标进程的档案（task_struct）</text>
+  <text class="code b" x="312" y="170">SigPnd  0000000000000000</text>
+  <text class="s" x="312" y="186">挂起集：信号一到,这里落一位</text>
+  <text class="code b" x="312" y="212">SigBlk  0000000000000000</text>
+  <text class="s" x="312" y="228">屏蔽集：落了位也先不处理</text>
+  <text class="code b" x="312" y="254">SigIgn  0000000000000006</text>
+  <text class="s" x="312" y="270">忽略集（后台作业的 SIGHUP/SIGINT）</text>
+  <text class="code b" x="312" y="296">SigCgt  0000000000004000</text>
+  <text class="s" x="312" y="312">已装处理函数集（此例:SIGTERM=15）</text>
+
+  <path class="w" d="M448,330 L448,368" marker-end="url(#ar)"/>
+
+  <rect class="box" x="298" y="370" width="300" height="86"/>
+  <text class="h" x="312" y="394">进程继续跑</text>
+  <text class="s" x="312" y="414">可能睡在 pause / sleep / read；</text>
+  <text class="s" x="312" y="432">信号到来会把它提前唤醒（第 7 节）</text>
+
+  <path class="w" d="M448,456 L448,494" marker-end="url(#ar)"/>
+
+  <rect class="box" x="298" y="496" width="300" height="100"/>
+  <text class="h" x="312" y="520">内核送它回用户态之前</text>
+  <text class="code b" x="312" y="544">查 SigPnd &amp; ~SigBlk</text>
+  <text class="s" x="312" y="564">系统调用/中断/调度返回,都是检查时机;</text>
+  <text class="s" x="312" y="582">kill 早在产生那一刻就返回了,不等这里</text>
+
+  <!-- 三个去处 -->
+  <rect class="box" x="660" y="96" width="310" height="86"/>
+  <text class="h" x="674" y="120">SigIgn 置位：丢弃</text>
+  <text class="s" x="674" y="142">递到的信号直接扔掉,</text>
+  <text class="s" x="674" y="160">进程毫无感觉,照常返回</text>
+
+  <rect class="box" x="660" y="200" width="310" height="140"/>
+  <text class="h" x="674" y="224">SigCgt 置位：处理函数插队</text>
+  <text class="s" x="674" y="246">内核把返回地址改到处理函数;</text>
+  <text class="s" x="674" y="264">执行完 sigreturn 系统调用,</text>
+  <text class="s" x="674" y="282">回到被打断的那条指令继续。</text>
+  <text class="s" x="674" y="304">sleep/pause 被打断会提前返回,</text>
+  <text class="s" x="674" y="322">返回值告诉 main 还剩几秒没睡</text>
+
+  <rect class="box" x="660" y="358" width="310" height="104"/>
+  <text class="h" x="674" y="382">都没登记：默认动作</text>
+  <text class="s" x="674" y="404">终止 / 终止+core / 停止 / 忽略,</text>
+  <text class="s" x="674" y="422">查 man 7 signal 的 Action 列;</text>
+  <text class="s" x="674" y="444">bash 把"被 N 号杀"记成 128+N</text>
+
+  <rect class="box" x="660" y="480" width="310" height="72"/>
+  <text class="h" x="674" y="504">例外：SIGKILL(9) / SIGSTOP(19)</text>
+  <text class="s" x="674" y="526">不查位图,直接执行,装处理函数</text>
+  <text class="s" x="674" y="544">会被拒绝（EINVAL,第 5 节实测）</text>
+
+  <path class="dash" d="M598,530 L628,530 L628,139 L660,139" marker-end="url(#ard)"/>
+  <text class="lb" x="600" y="120">忽略位=1</text>
+  <path class="dash" d="M598,540 L640,540 L640,266 L660,266" marker-end="url(#ard)"/>
+  <text class="lb" x="612" y="350">捕获位=1</text>
+  <path class="dash" d="M598,552 L652,552 L652,406 L660,406" marker-end="url(#ard)"/>
+  <text class="lb" x="640" y="478">都没有</text>
+  <path class="dash" d="M560,225 L580,225 L580,516 L660,516" marker-end="url(#ard)"/>
+  <text class="lb" x="560" y="604">SIGKILL/SIGSTOP 走这边,不查</text>
+
+  <text class="s" x="24" y="624">屏蔽中递到：只在 SigPnd 落位,毫无作用（第 6 节:5 发 1 执行）；同种标准信号不排队。</text>
+</svg>

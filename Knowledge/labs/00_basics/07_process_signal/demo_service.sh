@@ -1,5 +1,5 @@
 #!/bin/sh
-# 08 篇（进程与信号）实验 5：一个 init.d 风格的启停脚本
+# 12 篇（进程与信号）实验 5：一个 init.d 风格的启停脚本
 #
 # 用法：sh demo_service.sh start
 #       sh demo_service.sh stop-naive     照出厂脚本那样 killall 一下就返回
