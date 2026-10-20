@@ -18,6 +18,9 @@ Knowledge/labs/03_makefile/**/*
 !Knowledge/labs/03_makefile/**/*.c
 !Knowledge/labs/03_makefile/**/*.h
 !Knowledge/labs/03_makefile/**/Makefile
+!Knowledge/labs/03_makefile/**/Makefile.build
+!Knowledge/labs/03_makefile/**/*.mk
+!Knowledge/labs/03_makefile/**/*.sh
 !Knowledge/labs/03_makefile/**/*.md
 
 # 04 章（文件 IO）实验目录：只收源码，产物（o/wp/hole/buf/pipe_rw/cp_*/
@@ -37,6 +40,9 @@ Knowledge/labs/00_basics/**/*
 !Knowledge/labs/00_basics/**/
 !Knowledge/labs/00_basics/**/*.c
 !Knowledge/labs/00_basics/**/*.h
+!Knowledge/labs/00_basics/**/*.S
+!Knowledge/labs/00_basics/**/Makefile
+!Knowledge/labs/00_basics/**/*.mk
 !Knowledge/labs/00_basics/**/*.sh
 !Knowledge/labs/00_basics/**/*.md
 
@@ -56,7 +62,6 @@ Knowledge/labs/01_hello/**/*
 !Knowledge/labs/01_hello/**/*.md
 
 # 02 章（GCC）实验目录：只收源码，产物（main.o/libsub.*/test_* 等）由教程里的命令重建。
-# big1/big2（.bss 对照，fundamentals/01_ELF与程序加载 第四节用）是这一规则的两个名字。
 Knowledge/labs/02_gcc/**/*
 !Knowledge/labs/02_gcc/**/
 !Knowledge/labs/02_gcc/**/*.c
