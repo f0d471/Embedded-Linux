@@ -1,5 +1,5 @@
 #!/bin/bash
-# 00_基础 第 09 篇（驱动与设备文件）的判据自动核对
+# 00_基础 第 10 篇（驱动与设备文件）的判据自动核对
 #
 # 用法：bash check.sh
 #       普通用户能跑一半，建设备节点、读 /dev/rtc0、写 /dev/kmsg 这几组会 SKIP。
@@ -37,15 +37,23 @@ echo
 # 取 devopen 输出里某个路径那一行
 row() { "$HERE/devopen" "$@" | tail -1; }
 
-echo "=== 09 篇 二  设备文件里存的是两个数 ==="
+echo "=== 10 篇 二  设备文件里存的是两个数 ==="
 eq "/dev/null 是字符设备" "$(stat -c %F /dev/null)" "character special file"
 eq "/dev/null 的“大小”是 0" "$(stat -c %s /dev/null)" "0"
 eq "/dev/null 的设备号是 1,3" "$(stat -c '%t,%T' /dev/null)" "1,3"
 eq "/proc/devices 字符设备段里 1 号叫 mem" \
    "$(sed -n '/^Character/,/^$/p' /proc/devices | awk '$1 == 1 {print $2}')" "mem"
+eq "/proc/devices 块设备段里 1 号叫 ramdisk（同一个 1 号，两边各一张表）" \
+   "$(sed -n '/^Block/,$p' /proc/devices | awk '$1 == 1 {print $2; exit}')" "ramdisk"
 echo
 
-echo "=== 09 篇 三  名字无所谓，号码说了算 ==="
+echo "=== 10 篇 三  名字无所谓，号码说了算 ==="
+echo "$(row /dev/null)" | grep -q 'read=0 \[\]  write=1' \
+	&& ok "/dev/null 本体：读返回 0、写吞掉 1 字节（不要 root）" \
+	|| no "/dev/null 应当读返回 0、写成功" "$(row /dev/null)"
+echo "$(row /dev/full)" | grep -q 'write 失败 ENOSPC' \
+	&& ok "/dev/full 本体：写报 ENOSPC（不要 root）" \
+	|| no "/dev/full 写应当报 ENOSPC" "$(row /dev/full)"
 if [ $ROOT = 1 ]; then
 	cd "$LAB" || exit 1
 	mknod mynull c 1 3 && mknod myzero c 1 5 && mknod myfull c 1 7
@@ -64,13 +72,26 @@ else
 fi
 echo
 
-echo "=== 09 篇 四  号码没人认领，以及节点建在哪 ==="
+echo "=== 10 篇 四  号码没人认领，以及节点建在哪 ==="
 eq "200 号在 /proc/devices 里没有登记" "$(sed -n '/^Character/,/^$/p' /proc/devices | grep -cE '^ *200 ')" "0"
 eq "29 号登记的名字是 fb" "$(sed -n '/^Character/,/^$/p' /proc/devices | awk '$1 == 29 {print $2}')" "fb"
 if [ -e /sys/class/graphics/fb0 ]; then
 	skip "这台机器有 fb0，“登记了但没有实例”那条对照做不了"
 else
 	ok "/sys/class/graphics 下没有 fb0（只登记了号码，没有设备实例）"
+fi
+E=$(echo '#include <errno.h>' | gcc -E -dM -x c -)
+eq "errno 数值：ENXIO=6"   "$(echo "$E" | awk '$2=="ENXIO"  {print $3}')" "6"
+eq "errno 数值：ENODEV=19" "$(echo "$E" | awk '$2=="ENODEV" {print $3}')" "19"
+eq "errno 数值：ENOTTY=25" "$(echo "$E" | awk '$2=="ENOTTY" {print $3}')" "25"
+eq "errno 数值：ENOSPC=28" "$(echo "$E" | awk '$2=="ENOSPC" {print $3}')" "28"
+if command -v strace >/dev/null 2>&1; then
+	S=$(strace -e trace=write ./devopen /dev/full 2>&1 >/dev/null | grep 'write(3')
+	echo "$S" | grep -q '= -1 ENOSPC' \
+		&& ok "strace 看到 write 返回 -1 ENOSPC：errno 是 C 库从返回值翻出来的" \
+		|| no "strace 应当看到 write = -1 ENOSPC" "$S"
+else
+	skip "没有 strace，看不到系统调用返回值"
 fi
 if [ $ROOT = 1 ]; then
 	cd "$LAB" || exit 1
@@ -102,7 +123,7 @@ else
 fi
 echo
 
-echo "=== 09 篇 五  sysfs：内核公开出来的设备档案 ==="
+echo "=== 10 篇 五  sysfs：内核公开出来的设备档案 ==="
 N=0; BAD=0
 for d in /sys/class/mem/*; do
 	n=${d##*/}
@@ -141,7 +162,7 @@ done
 [ $FOUND = 0 ] && skip "没找到带 driver 链接的 net / rtc 设备"
 echo
 
-echo "=== 09 篇 六  ioctl：文件接口装不下的操作 ==="
+echo "=== 10 篇 六  ioctl：文件接口装不下的操作 ==="
 C=$(./ioctlcode)
 field() { echo "$C" | awk -v n="$1" -v k="$2" '$1 == n { for (i = 1; i <= NF; i++) if ($i ~ "^" k "=") { sub("^" k "=", "", $i); print $i } }'; }
 eq "RTC_RD_TIME 请求码是 0x80247009" "$(echo "$C" | awk '$1 == "RTC_RD_TIME" {print $2}')" "0x80247009"
@@ -162,7 +183,7 @@ else
 fi
 echo
 
-echo "=== 09 篇 七  dmesg：驱动写的日志 ==="
+echo "=== 10 篇 七  dmesg：驱动写的日志 ==="
 if [ "$(dmesg 2>/dev/null | wc -l)" -gt 0 ]; then ok "dmesg 读得到内核日志（$(dmesg | wc -l) 行）"; else skip "当前用户读不了 dmesg"; fi
 if [ $ROOT = 1 ]; then
 	M="devcheck-marker-$$"
