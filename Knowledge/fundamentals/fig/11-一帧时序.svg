@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560">
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    rect.act  { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    rect.pas  { fill: #e8e8e8; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.2; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="560" fill="#fff"/>
+  <text class="t" x="24" y="32">一行与一帧的时间结构：画面之间全是空白和同步</text>
+  <text class="s" x="24" y="54">白底=读显存的可见区；灰底=不读显存（空白与同步）。括号里是板上 1024x600 的实测拍数/行数。</text>
+
+  <!-- 一行 -->
+  <text class="h" x="40" y="92">一行（横向，单位：像素时钟拍）</text>
+  <rect class="act" x="40"  y="104" width="360" height="56"/>
+  <rect class="pas" x="400" y="104" width="82"  height="56"/>
+  <rect class="pas" x="482" y="104" width="52"  height="56"/>
+  <rect class="pas" x="534" y="104" width="96"  height="56"/>
+  <text class="b" x="220" y="128" text-anchor="middle">可见画面</text>
+  <text class="code s" x="220" y="148" text-anchor="middle">xres (1024)</text>
+  <text class="b" x="441" y="122" text-anchor="middle">前空白</text>
+  <text class="code s" x="441" y="140" text-anchor="middle">right</text>
+  <text class="code s" x="441" y="154" text-anchor="middle">(160)</text>
+  <text class="b" x="508" y="122" text-anchor="middle">行同步</text>
+  <text class="code s" x="508" y="140" text-anchor="middle">hsync</text>
+  <text class="code s" x="508" y="154" text-anchor="middle">(20)</text>
+  <text class="b" x="582" y="122" text-anchor="middle">后空白</text>
+  <text class="code s" x="582" y="140" text-anchor="middle">left</text>
+  <text class="code s" x="582" y="154" text-anchor="middle">(140)</text>
+  <text class="s" x="650" y="122">fbset timings 的顺序：</text>
+  <text class="code s" x="650" y="140">pixclock left right</text>
+  <text class="code s" x="650" y="158">upper lower hsync vsync</text>
+  <text class="s" x="40" y="184">一行总拍数 htotal = 1024 + 160 + 20 + 140 = 1344。可见区之外的四段里，行同步那 20 拍发 HSYNC 脉冲，其余是空白。</text>
+
+  <!-- 一帧 -->
+  <text class="h" x="40" y="228">一帧（纵向，单位：行）</text>
+  <rect class="act" x="40"  y="240" width="360" height="56"/>
+  <rect class="pas" x="400" y="240" width="82"  height="56"/>
+  <rect class="pas" x="482" y="240" width="52"  height="56"/>
+  <rect class="pas" x="534" y="240" width="96"  height="56"/>
+  <text class="b" x="220" y="264" text-anchor="middle">可见行</text>
+  <text class="code s" x="220" y="284" text-anchor="middle">yres (600)</text>
+  <text class="b" x="441" y="258" text-anchor="middle">画面后的空白</text>
+  <text class="code s" x="441" y="276" text-anchor="middle">lower</text>
+  <text class="code s" x="441" y="290" text-anchor="middle">(12)</text>
+  <text class="b" x="508" y="258" text-anchor="middle">场同步</text>
+  <text class="code s" x="508" y="276" text-anchor="middle">vsync</text>
+  <text class="code s" x="508" y="290" text-anchor="middle">(3)</text>
+  <text class="b" x="582" y="258" text-anchor="middle">画面前的空白</text>
+  <text class="code s" x="582" y="276" text-anchor="middle">upper</text>
+  <text class="code s" x="582" y="290" text-anchor="middle">(20)</text>
+  <text class="s" x="650" y="258">注意方向的对照：</text>
+  <text class="s" x="650" y="276">横向 left 在画面"左边"，</text>
+  <text class="s" x="650" y="294">纵向 upper 在画面"上边"，</text>
+  <text class="s" x="650" y="312">两者都在同步之后、画面之前。</text>
+  <text class="s" x="40" y="320">一帧总行数 vtotal = 600 + 12 + 3 + 20 = 635。场同步那 3 行整行是同步；期间行同步照样每行都发。</text>
+
+  <!-- 帧率 -->
+  <rect class="act" x="40" y="368" width="920" height="120"/>
+  <text class="h" x="60" y="396">两个总数一到手，帧率就是一次除法</text>
+  <text class="code b" x="60" y="426">帧率 = 像素时钟 / htotal / vtotal = 50_000_000 / 1344 / 635 = 58.586 Hz   （板上 fbset: V: 58.586 Hz）</text>
+  <text class="code b" x="60" y="452">行频 = 像素时钟 / htotal = 37.202 kHz                        （板上 fbset: H: 37.202 kHz）</text>
+  <text class="s" x="60" y="478">漏掉空白和同步，会算成 50 MHz / 1024 / 600 = 81.380 Hz，且同步脉冲数为 0（第 3.5 节注错实测）。</text>
+
+  <text class="s" x="24" y="528">图 1　白底段每拍从 framebuffer 读一个像素；灰底段不读显存。空白与同步占一帧 853440 拍中的 28%。</text>
+</svg>

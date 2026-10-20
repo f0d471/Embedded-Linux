@@ -1,11 +1,12 @@
 /*
- * 10 篇（显示原理）实验：用软件模拟显示控制器的扫描
+ * 11 篇（显示原理）实验：用软件模拟显示控制器的扫描
  *
  * 电脑上没有显示控制器，所以用一个循环扮演它：每循环一次就是像素时钟走一拍，
  * 两个计数器 x、y 记着"现在扫到哪一格"。
  *
  * 用法：./scan draw  xres yres pixclock left right upper lower hsync vsync
  *       ./scan count xres yres pixclock left right upper lower hsync vsync 秒数
+ *       ./scan tear  xres yres pixclock left right upper lower hsync vsync 写一帧毫秒数
  *
  * 参数顺序和 fbset 一样：先 geometry 里的 xres yres，再 timings 那一行的 7 个数，
  * 所以板子上 fbset 打出来的数可以原样抄进来。
@@ -15,7 +16,12 @@
  * （内核头文件的注释：left_margin 是 "time from sync to picture"，
  *   right_margin 是 "time from picture to sync"）
  *
+ * tear 子命令模拟"边写边扫"：扫描走到第 yres/2 行行首那一刻，开始从显存左上角
+ * 线性地写一帧新画面；逐拍比较写指针和扫描位置，看每一帧的每一行读到的是
+ * 旧画面还是新画面。再按双缓冲（写完才在场同步换指针）重算一遍作对照。
+ *
  * 注错：-DBUG_NO_BLANK 控制器不走空白和同步，一行只有 xres 拍、一帧只有 yres 行。
+ *       -DBUG_WR_INSTANT 假设写显存不花时间（写一帧 0 拍），撕裂线挪到写入开始的那一行。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +35,8 @@ struct timing {
 
 static void usage(const char *me)
 {
-	fprintf(stderr, "用法: %s draw|count xres yres pixclock left right upper lower hsync vsync [秒数]\n", me);
+	fprintf(stderr, "用法: %s draw|count xres yres pixclock left right upper lower hsync vsync [秒数]\n"
+	                "      %s tear xres yres pixclock left right upper lower hsync vsync 写一帧毫秒数\n", me, me);
 	exit(2);
 }
 
@@ -105,6 +112,72 @@ static void count(const struct timing *t, double secs)
 	printf("公式 1e12/pixclock/htotal/vtotal = %.3f Hz\n", hz);
 }
 
+/* 第 k 拍时写指针的位置：已经写进显存的像素个数 */
+static unsigned long long frontier(unsigned long long k, unsigned long long t0,
+				   unsigned long long w, unsigned long long npix)
+{
+	if (k < t0)
+		return 0;
+	if (w == 0 || k >= t0 + w)
+		return npix;
+	return (k - t0) * npix / w;
+}
+
+static void tear(const struct timing *t, double write_ms)
+{
+	unsigned long long ft = (unsigned long long)t->htotal * t->vtotal;
+	unsigned long long npix = (unsigned long long)t->xres * t->yres;
+	unsigned long long w = (unsigned long long)(write_ms / 1e3 * 1e12 / t->pixclock + 0.5);
+	unsigned long long t0 = (unsigned long long)(t->yres / 2) * t->htotal;	/* 第 yres/2 行行首 */
+#ifdef BUG_WR_INSTANT
+	w = 0;
+#endif
+
+	printf("一帧 %llu 拍 = %.3f ms；写一帧 %.2f ms = %llu 拍（占 %.3f 帧）\n",
+	       ft, ft * t->pixclock / 1e9, write_ms, w, (double)w / ft);
+	printf("写入开始的那一刻，扫描在第 %u 行行首；写完时扫描又走了 %llu 行\n",
+	       t->yres / 2, w / t->htotal);
+
+	for (int flip = 0; flip <= 1; flip++) {
+		/* 双缓冲：写完后的下一个场同步才换指针，换完的那一帧整帧都是新画面 */
+		unsigned long long flip_frame = (t0 + w) / ft + 1;
+		int torn_frames = 0;
+
+		printf("%s:\n", flip ? "双缓冲（先写背面缓冲，写完等下一个场同步换指针）"
+				     : "直接写（写到哪算哪）");
+		for (unsigned long long f = 0; f < 3; f++) {
+			int ytear = -1;	/* 第一个显示新画面的行 */
+
+			for (unsigned y = 0; y < t->yres; y++) {
+				int isnew;
+
+				if (flip) {
+					isnew = f >= flip_frame;
+				} else {
+					/* 扫描到这一行中点那一拍，写指针过没过这行的中点 */
+					unsigned long long k = f * ft + (unsigned long long)y * t->htotal + t->xres / 2;
+					isnew = frontier(k, t0, w, npix) >
+					        (unsigned long long)y * t->xres + t->xres / 2;
+				}
+				if (isnew) {
+					ytear = y;
+					break;
+				}
+			}
+			if (ytear < 0)
+				printf("  帧 %llu: 整帧旧画面\n", f);
+			else if (ytear == 0)
+				printf("  帧 %llu: 整帧新画面\n", f);
+			else {
+				printf("  帧 %llu: 第 0..%d 行旧画面，第 %d..%u 行新画面（撕裂线在第 %d 行）\n",
+				       f, ytear - 1, ytear, t->yres - 1, ytear);
+				torn_frames++;
+			}
+		}
+		printf("  => %s: %d 帧带撕裂线\n", flip ? "双缓冲" : "直接写", torn_frames);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct timing t;
@@ -126,6 +199,8 @@ int main(int argc, char **argv)
 		draw(&t);
 	else if (!strcmp(argv[1], "count") && argc > 11 && t.pixclock)
 		count(&t, atof(argv[11]));
+	else if (!strcmp(argv[1], "tear") && argc > 11 && t.pixclock)
+		tear(&t, atof(argv[11]));
 	else
 		usage(argv[0]);
 	return 0;

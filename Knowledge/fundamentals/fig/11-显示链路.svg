@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="520" viewBox="0 0 1000 520">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    .lb { font-size: 11px; fill: #333; }
+    rect.box { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.4; }
+    path.dash { fill: none; stroke: #666; stroke-width: 1.3; stroke-dasharray: 5,4; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="520" fill="#fff"/>
+  <text class="t" x="24" y="32">整机显示链路：数据链向下，控制链向上</text>
+  <text class="s" x="24" y="54">实线=画面数据一条路；虚线=配置与能力查询（都是 I2C）。</text>
+
+  <!-- 数据链 -->
+  <text class="h" x="40" y="88">数据链（板 → 屏）</text>
+
+  <rect class="box" x="40" y="104" width="150" height="72"/>
+  <text class="h" x="52" y="128">程序</text>
+  <text class="s" x="52" y="148">写显存 = 写普通内存</text>
+  <text class="s" x="52" y="164">（mmap，第 09 篇）</text>
+
+  <path class="w" d="M190,140 L222,140" marker-end="url(#ar)"/>
+
+  <rect class="box" x="224" y="104" width="160" height="72"/>
+  <text class="h" x="236" y="128">framebuffer</text>
+  <text class="code s" x="236" y="148">DDR 0x8c100000</text>
+  <text class="s" x="236" y="166">32 MiB，屏幕不存画面</text>
+
+  <path class="w" d="M384,140 L416,140" marker-end="url(#ar)"/>
+
+  <rect class="box" x="418" y="104" width="170" height="72"/>
+  <text class="h" x="430" y="128">LCDIF 显示控制器</text>
+  <text class="s" x="430" y="148">x/y 计数器逐拍读出</text>
+  <text class="s" x="430" y="166">插空白与同步（图 1）</text>
+
+  <path class="w" d="M588,140 L620,140" marker-end="url(#ar)"/>
+  <text class="s" x="604" y="96" text-anchor="middle">并行 RGB</text>
+
+  <rect class="box" x="622" y="104" width="150" height="72"/>
+  <text class="h" x="634" y="128">SiI9022</text>
+  <text class="s" x="634" y="148">并转串</text>
+  <text class="s" x="634" y="166">I2C 1 号总线 0x39</text>
+
+  <path class="w" d="M772,140 L804,140" marker-end="url(#ar)"/>
+  <text class="s" x="789" y="96" text-anchor="middle">TMDS</text>
+
+  <rect class="box" x="806" y="104" width="150" height="72"/>
+  <text class="h" x="818" y="128">HDMI 显示器</text>
+  <text class="s" x="818" y="148">LCD 面板发光</text>
+  <text class="s" x="818" y="166">每 17 ms 重扫一遍</text>
+
+  <!-- 控制链 -->
+  <text class="h" x="40" y="248">控制链（屏 → 板，再配下去）</text>
+
+  <rect class="box" x="806" y="264" width="150" height="72"/>
+  <text class="h" x="818" y="288">显示器里的 EDID</text>
+  <text class="s" x="818" y="308">自报能力：四种写法</text>
+  <text class="s" x="818" y="324">报 22 条模式（第 7 节）</text>
+
+  <path class="dash" d="M806,300 L660,300" marker-end="url(#ar)"/>
+  <text class="s" x="660" y="256">DDC（HDMI 线里的 I2C）</text>
+
+  <rect class="box" x="484" y="264" width="170" height="72"/>
+  <text class="h" x="496" y="288">内核驱动（mxsfb）</text>
+  <text class="s" x="496" y="308">读 EDID，选模式</text>
+  <text class="s" x="496" y="324">（本板选中 1280x720-60）</text>
+
+  <path class="dash" d="M484,288 L400,288 L400,220 L505,220 L505,178" marker-end="url(#ar)"/>
+  <text class="s" x="410" y="240">把时序/分辨率/显存地址写进寄存器</text>
+
+  <path class="dash" d="M484,320 L440,320 L440,392 L634,392 L634,178" marker-end="url(#ar)"/>
+  <text class="s" x="420" y="384">经 I2C 配置 SiI9022 的寄存器</text>
+
+  <rect class="box" x="60" y="264" width="180" height="72"/>
+  <text class="h" x="72" y="288">fbset / 程序 ioctl</text>
+  <text class="s" x="72" y="308">从驱动读回当前模式</text>
+  <text class="s" x="72" y="326">（本篇对账的数据来源）</text>
+
+  <path class="dash" d="M484,308 L244,308" marker-end="url(#ar)"/>
+
+  <!-- 底部说明 -->
+  <rect class="box" x="40" y="420" width="920" height="66"/>
+  <text class="s" x="60" y="444">两条链都会换模式：插上不同显示器，EDID 不同，驱动重配 LCDIF 与 SiI9022，分辨率、bpp 都可能变——</text>
+  <text class="s" x="60" y="464">但扫描的原理不变：还是第 1 节那两个计数器，按新的一组 timings 逐拍读显存。</text>
+
+  <text class="s" x="24" y="508">实线=画面数据的路；虚线=配置与查询的路（I2C：两根线、挂多芯片、地址寻址）。</text>
+</svg>
