@@ -1,8 +1,7 @@
-/* 02 章 2.3 节：多文件与库的实验。
- * main.c 只需要 sub_func 的"声明"，定义在 sub.c 里——
- * "在哪"是链接器的事，编译 main.c 时编译器不需要知道。
+/* 多文件与库的实验：main.c 只认识 sub_func 的声明（来自 sub.h），
+ * 定义在 sub.c 里。编译 main.c 时用不到定义，找定义是链接那一步的事。
  */
-void sub_func(void);          /* 声明:01 章 1.3 讲过的分工 */
+#include "sub.h"
 
 int main(void)
 {
