@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="620" viewBox="0 0 1000 620">
+  <rect x="0" y="0" width="1000" height="620" fill="#ffffff"/>
+
+  <text x="20" y="30" font-size="16" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">一次 write 系统调用：从用户态到内核，再回到用户态</text>
+
+  <!-- 图例 -->
+  <line x1="700" y1="52" x2="750" y2="52" stroke="#0d47a1" stroke-width="2"/>
+  <text x="758" y="56" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">实线：真实执行的通路</text>
+  <line x1="700" y1="74" x2="750" y2="74" stroke="#c62828" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="758" y="78" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">虚线：被 CPU/内核拒绝的通路</text>
+  <line x1="700" y1="96" x2="750" y2="96" stroke="#000000" stroke-width="3"/>
+  <text x="758" y="100" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">粗线：用户态 / 内核态边界</text>
+
+  <!-- 区域标注 -->
+  <text x="20" y="76" font-size="13" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">用户态（ring 3 / User 模式）</text>
+  <text x="20" y="336" font-size="13" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">内核态（ring 0 / SVC 模式）</text>
+
+  <!-- 边界 -->
+  <line x1="20" y1="300" x2="980" y2="300" stroke="#000000" stroke-width="3"/>
+
+  <!-- main 框 -->
+  <rect x="40" y="92" width="210" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="145" y="114" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">main()</text>
+  <text x="145" y="134" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">write(1, "hi\n", 3)</text>
+
+  <!-- C 库封装框 -->
+  <rect x="330" y="80" width="250" height="76" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="455" y="100" font-size="12" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">glibc 的 write() 封装：摆寄存器</text>
+  <text x="455" y="122" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">r7 = 4   /* __NR_write */</text>
+  <text x="455" y="142" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">r0 = 1  r1 = buf  r2 = 3</text>
+
+  <!-- svc 框（贴着边界上方） -->
+  <rect x="430" y="245" width="100" height="38" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="480" y="269" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">svc #0</text>
+
+  <!-- svc 注解 -->
+  <text x="545" y="252" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">CPU 切到 SVC 模式，保存现场，</text>
+  <text x="545" y="267" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">跳到内核钉死的固定入口</text>
+  <text x="545" y="287" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">x86-64 对应：syscall 指令，号放 rax</text>
+
+  <!-- strace 观察点（骑在边界上方右侧） -->
+  <rect x="745" y="225" width="235" height="48" fill="#ffffff" stroke="#555555" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="862" y="244" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">strace 骑在边界上（ptrace）</text>
+  <text x="862" y="262" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">记的是内核收到的，不是源码写的</text>
+
+  <!-- 内核侧：入口 -->
+  <rect x="380" y="352" width="170" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="465" y="371" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">vector_swi</text>
+  <text x="465" y="388" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">固定入口，读 r7 拿调用号</text>
+
+  <!-- 内核侧：查表 -->
+  <rect x="610" y="352" width="190" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="705" y="371" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">sys_call_table[4]</text>
+  <text x="705" y="388" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">按号查表，得到 sys_write</text>
+
+  <!-- 内核侧：sys_write -->
+  <rect x="610" y="446" width="190" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="705" y="473" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">sys_write(fd, buf, n)</text>
+
+  <!-- 内核侧：驱动与硬件 -->
+  <rect x="850" y="446" width="130" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="915" y="465" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">tty 驱动 → 串口</text>
+  <text x="915" y="482" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">字符出现在线上</text>
+
+  <!-- 返回值框 -->
+  <rect x="330" y="446" width="240" height="44" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="450" y="465" font-size="11" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">返回值写入 r0</text>
+  <text x="450" y="482" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">失败时放的是 -errno（-4095～-1）</text>
+
+  <!-- C 库收尾框（用户态，左下） -->
+  <rect x="140" y="170" width="280" height="48" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="280" y="190" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">glibc 检查 r0：落在 -4095～-1</text>
+  <text x="280" y="206" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">就把 errno 设为 -r0，返回 -1；否则返回 r0</text>
+
+  <!-- 被拒绝通路一：直接跳内核 -->
+  <line x1="55" y1="148" x2="55" y2="330" stroke="#c62828" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="55" y="352" font-size="14" font-family="Microsoft YaHei, sans-serif" fill="#c62828" text-anchor="middle">✕</text>
+  <text x="120" y="346" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#c62828">直接 bl 内核的某个地址：</text>
+  <text x="120" y="361" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#c62828">入口只有固定的一个，挑不了</text>
+
+  <!-- 被拒绝通路二：直接写硬件 -->
+  <line x1="95" y1="148" x2="95" y2="330" stroke="#c62828" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="95" y="352" font-size="14" font-family="Microsoft YaHei, sans-serif" fill="#c62828" text-anchor="middle">✕</text>
+  <text x="120" y="386" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#c62828">直接写 0x02020040（UART1 发送寄存器）：</text>
+  <text x="120" y="401" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#c62828">地址不在用户态页表里，MMU 拒绝，SIGSEGV</text>
+
+  <!-- 前向箭头：main -> 封装 -->
+  <line x1="250" y1="120" x2="324" y2="120" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="330,120 322,116 322,124" fill="#0d47a1"/>
+
+  <!-- 封装 -> svc -->
+  <line x1="480" y1="156" x2="480" y2="239" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="480,245 476,237 484,237" fill="#0d47a1"/>
+
+  <!-- svc -> vector_swi（过边界） -->
+  <line x1="480" y1="283" x2="480" y2="346" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="480,352 476,344 484,344" fill="#0d47a1"/>
+
+  <!-- vector_swi -> 查表 -->
+  <line x1="550" y1="374" x2="604" y2="374" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="610,374 602,370 602,378" fill="#0d47a1"/>
+
+  <!-- 查表 -> sys_write -->
+  <line x1="705" y1="396" x2="705" y2="440" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="705,446 701,438 709,438" fill="#0d47a1"/>
+
+  <!-- sys_write -> 驱动 -->
+  <line x1="800" y1="468" x2="844" y2="468" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="850,468 842,464 842,472" fill="#0d47a1"/>
+
+  <!-- sys_write -> 返回值 -->
+  <line x1="610" y1="468" x2="576" y2="468" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="570,468 578,464 578,472" fill="#0d47a1"/>
+
+  <!-- 返回值 -> 上穿边界（异常返回），进 errno 检查框 -->
+  <line x1="380" y1="446" x2="380" y2="224" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="380,218 376,226 384,226" fill="#0d47a1"/>
+  <text x="392" y="326" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">异常返回：恢复现场，</text>
+  <text x="392" y="341" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">CPU 切回 User 模式</text>
+
+  <!-- errno 检查框 -> main -->
+  <line x1="200" y1="170" x2="200" y2="154" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="200,148 196,156 204,156" fill="#0d47a1"/>
+  <text x="212" y="163" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">回到 main 的下一条指令</text>
+
+  <!-- 底部注释 -->
+  <text x="20" y="560" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#333333">整条链上只有 svc 那一步跨越特权级：上方全是用户态代码（你的程序与 glibc），下方全是内核代码。</text>
+  <text x="20" y="580" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#333333">入口名 vector_swi 与表名 sys_call_table 出自内核源码 arch/arm/kernel/entry-common.S（x86-64 对应 entry_SYSCALL_64）。</text>
+</svg>

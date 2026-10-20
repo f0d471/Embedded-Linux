@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1020" height="440" viewBox="0 0 1020 440">
+  <rect x="0" y="0" width="1020" height="440" fill="#ffffff"/>
+
+  <text x="20" y="30" font-size="16" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">一条 gcc 命令的背后：四个程序接力，一条分界线</text>
+
+  <!-- 图例 -->
+  <line x1="640" y1="46" x2="690" y2="46" stroke="#0d47a1" stroke-width="2"/>
+  <text x="698" y="50" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">蓝实线箭头：产物交接（真实执行）</text>
+  <line x1="640" y1="68" x2="690" y2="68" stroke="#000000" stroke-width="3"/>
+  <text x="698" y="72" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">粗黑竖线：编译期 / 运行期分界</text>
+
+  <!-- 第一行：main 线 -->
+  <rect x="30" y="100" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="90" y="124" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">main.c</text>
+  <text x="90" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">C 源码</text>
+
+  <rect x="200" y="100" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="260" y="124" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">main.i</text>
+  <text x="260" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">摊平后的 C 文本</text>
+
+  <rect x="370" y="100" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="430" y="124" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">main.s</text>
+  <text x="430" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">汇编文本（名字还在）</text>
+
+  <rect x="540" y="100" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="600" y="124" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">main.o</text>
+  <text x="600" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">机器码 + 便条</text>
+
+  <rect x="740" y="100" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="800" y="124" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">app</text>
+  <text x="800" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">可执行文件（ELF）</text>
+
+  <rect x="930" y="100" width="80" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="970" y="124" font-size="12" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">进程</text>
+  <text x="970" y="144" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">内存里</text>
+
+  <!-- 箭头与工序标注 -->
+  <line x1="150" y1="128" x2="196" y2="128" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="196,128 188,124 188,132" fill="#0d47a1"/>
+  <text x="175" y="66" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">预处理</text>
+  <text x="175" y="82" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">cc1 -E</text>
+
+  <line x1="320" y1="128" x2="366" y2="128" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="366,128 358,124 358,132" fill="#0d47a1"/>
+  <text x="345" y="66" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">编译</text>
+  <text x="345" y="82" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">cc1</text>
+
+  <line x1="490" y1="128" x2="536" y2="128" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="536,128 528,124 528,132" fill="#0d47a1"/>
+  <text x="515" y="66" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">汇编</text>
+  <text x="515" y="82" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">as</text>
+
+  <line x1="660" y1="128" x2="736" y2="128" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="736,128 728,124 728,132" fill="#0d47a1"/>
+  <text x="700" y="66" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">链接</text>
+  <text x="700" y="82" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">collect2 -&gt; ld</text>
+
+  <line x1="860" y1="128" x2="926" y2="128" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="926,128 918,124 918,132" fill="#0d47a1"/>
+  <text x="895" y="66" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">加载</text>
+  <text x="895" y="82" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">load_elf_binary</text>
+
+  <!-- 分界线 -->
+  <line x1="895" y1="92" x2="895" y2="400" stroke="#000000" stroke-width="3"/>
+
+  <!-- 第二行：add 线 -->
+  <rect x="30" y="250" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="90" y="274" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">add.c</text>
+  <text x="90" y="294" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">C 源码</text>
+
+  <rect x="540" y="250" width="120" height="56" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="600" y="274" font-size="12" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">add.o</text>
+  <text x="600" y="294" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333" text-anchor="middle">机器码</text>
+
+  <line x1="150" y1="278" x2="536" y2="278" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="536,278 528,274 528,282" fill="#0d47a1"/>
+  <text x="345" y="236" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">同一条流水线：</text>
+  <text x="345" y="252" font-size="10" font-family="Consolas, monospace" fill="#000000" text-anchor="middle">cc1 -E -&gt; cc1 -&gt; as</text>
+
+  <polyline points="660,264 700,264 700,170 736,150" fill="none" stroke="#0d47a1" stroke-width="2"/>
+  <polygon points="736,150 726,150 732,158" fill="#0d47a1"/>
+  <text x="706" y="222" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000">ld 把两路 .o 合并</text>
+
+  <!-- 分界线两侧标注 -->
+  <text x="30" y="425" font-size="12" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">分界线左侧：编译期（开发机上，第 1 到 4 步）</text>
+  <text x="905" y="425" font-size="12" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">运行期</text>
+  <text x="905" y="440" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">（目标机器上）</text>
+</svg>

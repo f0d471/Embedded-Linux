@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470">
+  <rect x="0" y="0" width="1000" height="470" fill="#ffffff"/>
+
+  <text x="20" y="30" font-size="16" font-weight="bold" font-family="Microsoft YaHei, sans-serif" fill="#000000">链接：合并同名 section，分地址，按便条把空洞填上</text>
+
+  <!-- 图例 -->
+  <text x="600" y="52" font-size="11" font-family="Consolas, monospace" fill="#c62828">f7ff fffe</text>
+  <text x="672" y="52" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">：链接前的占位</text>
+  <text x="600" y="74" font-size="11" font-family="Consolas, monospace" fill="#1b5e20">f000 f80b</text>
+  <text x="672" y="74" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">：链接后填上的值</text>
+
+  <!-- main.o -->
+  <rect x="40" y="70" width="370" height="250" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="55" y="92" font-size="12" font-weight="bold" font-family="Consolas, monospace" fill="#000000">main.o</text>
+  <text x="118" y="92" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#333333">（链接前）</text>
+  <text x="55" y="116" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">符号表（nm）：add 是 U（欠账），</text>
+  <text x="55" y="134" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">main / g_init / g_bss 地址全是 0</text>
+  <text x="55" y="158" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">.text 里那条调用指令：</text>
+  <text x="70" y="180" font-size="12" font-family="Consolas, monospace" fill="#c62828">e:  f7ff fffe   bl 0 &lt;add&gt;</text>
+  <text x="55" y="206" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">重定位便条（readelf -r）：</text>
+  <text x="70" y="228" font-size="11" font-family="Consolas, monospace" fill="#000000">Offset 0x0e  R_ARM_THM_CALL  add</text>
+  <text x="70" y="248" font-size="11" font-family="Consolas, monospace" fill="#000000">Offset 0x20  R_ARM_REL32     g_init</text>
+  <text x="70" y="268" font-size="11" font-family="Consolas, monospace" fill="#000000">Offset 0x24  R_ARM_REL32     g_bss</text>
+  <text x="55" y="300" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">便条说：偏移 0x0e 处，按 THM_CALL 规则，填 add 的地址</text>
+
+  <!-- add.o -->
+  <rect x="40" y="360" width="370" height="80" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="55" y="384" font-size="12" font-weight="bold" font-family="Consolas, monospace" fill="#000000">add.o</text>
+  <text x="110" y="384" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#333333">（链接前）</text>
+  <text x="55" y="410" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">.text：add 定义在这里，地址也是 0</text>
+  <text x="55" y="428" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">两个文件各有一个"0 号地址"，不可能同时成立</text>
+
+  <!-- app -->
+  <rect x="560" y="70" width="420" height="370" fill="#ffffff" stroke="#000000" stroke-width="1.5"/>
+  <text x="575" y="92" font-size="12" font-weight="bold" font-family="Consolas, monospace" fill="#000000">app</text>
+  <text x="612" y="92" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#333333">（链接后，nm / objdump / app.map 实测）</text>
+  <text x="575" y="116" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">.text 合并后排布：</text>
+  <text x="590" y="138" font-size="11" font-family="Consolas, monospace" fill="#000000">0x3dc  _start   (Scrt1.o)</text>
+  <text x="590" y="158" font-size="11" font-family="Consolas, monospace" fill="#000000">0x4d8  main     (main.o)</text>
+  <text x="590" y="180" font-size="12" font-family="Consolas, monospace" fill="#1b5e20"> 4e6:  f000 f80b  bl 500 &lt;add&gt;</text>
+  <text x="590" y="200" font-size="11" font-family="Consolas, monospace" fill="#000000">0x500  add      (add.o)</text>
+  <text x="575" y="228" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">数据：</text>
+  <text x="590" y="248" font-size="11" font-family="Consolas, monospace" fill="#000000">0x20008  g_init  (.data)</text>
+  <text x="590" y="268" font-size="11" font-family="Consolas, monospace" fill="#000000">0x20010  g_bss   (.bss)</text>
+  <text x="575" y="298" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">验算：0x4e6 + 4 + 0x16 = 0x500，正是 add 的门牌</text>
+  <text x="575" y="328" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">便条上的三件事全部兑现：</text>
+  <text x="590" y="350" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">1. 名字有了地址（nm 里 add 从 U 变 T）</text>
+  <text x="590" y="372" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">2. 空洞被填上（f7ff fffe 改成 f000 f80b）</text>
+  <text x="590" y="394" font-size="11" font-family="Microsoft YaHei, sans-serif" fill="#000000">3. 谁都没定义就报错（undefined reference）</text>
+  <text x="575" y="424" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#333333">crt 启动代码（Scrt1.o 等）由 gcc 自动加入，_start 在里面</text>
+
+  <!-- 搬运箭头 -->
+  <line x1="410" y1="150" x2="554" y2="150" stroke="#000000" stroke-width="1.5"/>
+  <polygon points="554,150 546,146 546,154" fill="#000000"/>
+  <text x="482" y="140" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">合并 .text，分地址</text>
+
+  <polyline points="410,400 480,400 480,196 554,196" fill="none" stroke="#000000" stroke-width="1.5"/>
+  <polygon points="554,196 546,192 546,200" fill="#000000"/>
+  <text x="424" y="352" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000">add 排在 main 后面（0x500）</text>
+
+  <polyline points="410,240 500,240 500,180 584,180" fill="none" stroke="#000000" stroke-width="1.5"/>
+  <polygon points="584,180 576,176 576,184" fill="#000000"/>
+  <text x="500" y="228" font-size="10" font-family="Microsoft YaHei, sans-serif" fill="#000000" text-anchor="middle">按便条填空</text>
+</svg>
