@@ -1,147 +1,67 @@
 # 01 ELF 与程序加载
 
-## 你会在哪里撞见它
+    实验    Knowledge/labs/00_basics/01_link_and_load/（与 00 篇共用一套判据）
+    电脑    WSL Ubuntu 26.04（内核 6.6.114），gcc 15.2.0，
+            arm-linux-gnueabihf-gcc 15.2.0，binutils 2.46
+            （本篇"本机实测"均为 2026-10-20 实跑；内核行为另对照
+            Linux v4.9 与 v6.6 的源码逐段核实）
+    判据    bash Knowledge/labs/00_basics/01_link_and_load/check.sh
+            2026-10-20 复核：79 PASS / 0 FAIL / 0 SKIP（与 00 篇合并计数）
 
-你把电脑上编好的程序拷到板子上，敲下去，板子回你：
+---
 
-    -bash: ./hello_arm: cannot execute binary file: Exec format error
-
-文件明明在那儿，权限也给了，就是不认。或者你 `file a.out`，它回一句
-`ELF 32-bit LSB executable, ARM`，你不知道这行字里哪些是重点。
-
-`Exec format error` 的意思很具体：内核翻开文件头几十个字节，看到的东西
-它不认识，拒绝往下走。要看懂它，就得知道那几十个字节里写了什么。
-
-## 这篇要回答的三个问题
-
-1. 一个文件里到底存了什么，凭什么内核能把它变成进程？
-2. section 和 segment 是同一份内容的两种切法，为什么两张表都要有？
-3. `.bss` 不占文件空间，加载器怎么知道要清多少零？
-
-## 先动手看一眼
-
-不用懂格式，先把文件开头十六个字节打出来（本机实测，2026-09-08）：
-
-```bash
-hexdump -C app | head -2
-#  -C  左边偏移、中间十六进制、右边这些字节当字符看
-```
+**你会在哪里撞见它**：教程 01 篇第 3.1 节，ARM 版的程序在电脑上运行，得到
 
 ```text
-00000000  7f 45 4c 46 01 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|
-00000010  03 00 28 00 01 00 00 00  dd 03 00 00 34 00 00 00  |..4...|
+bash: ./hello_arm_dynamic: cannot execute binary file: Exec format error
 ```
 
-右边那列 `.ELF` 就是魔数；偏移 0x04 的 `01` 是 32 位，0x05 的 `01` 是小端，
-0x10 的 `03 00` 是文件类型，0x12 的 `28 00` 是 ARM。**十六个字节里已经写了
-"我是谁、给谁跑"。** 这一篇把它们逐个读出来。
+教程 01 篇讲清了"是内核在 `execve` 里检查文件头、发现架构不符后拒绝"，并看了
+文件头前 20 个字节。但只要再往下走一步，问题就变密了：`file` 说的
+`interpreter /lib/ld-linux-armhf.so.3` 存在文件哪里？`readelf -h` 那十几行
+各自管什么？为什么程序跑起来后 `/proc/self/maps` 里代码段和数据段是分开的
+两块？这些问题的答案都在 ELF 这份文件格式里。教程 01 篇讲的是"哪几个字节导致
+拒绝"，本篇讲的是"整个文件按什么规矩组织"。
 
-实验目录 `Knowledge/labs/00_basics/01_link_and_load/`（沿用 00 篇的 `app`）与
-`Knowledge/labs/02_gcc/`（big1 / big2）；输出为 2026-09-08 本机实跑，
-工具链 `arm-linux-gnueabihf-gcc 15.2.0`。判据自查：
-`bash Knowledge/labs/00_basics/01_link_and_load/check.sh`，基线 45 PASS / 0 FAIL。
+**这篇要回答的问题**：
+
+1. 一个可执行文件里到底存了哪些东西，凭什么内核能把它变成一个进程？
+2. section 和 segment 是同一份内容的两种切法，为什么两张表都必须存在？
+3. `.bss` 不在文件里占字节，加载器怎么知道要清出多大一块零？
+4. 从 `execve` 到 `main` 的第一行，中间每一步是谁在跑？
 
 ---
 
-## 一、上一篇留下的问题
+## 0 先动手看一眼
 
-上一篇最后停在这里：
+实验目录里的 `app` 是 00 篇链接出来的 ARM 程序（`main.c` + `add.c`）。
+不用懂格式，先让 `readelf` 把它的文件头全部翻成文字：
 
-    链接器把 main 安排在地址 0x4d8，把 .text 整体安排在 0x3dc。
-    加载器要照这个布局把文件搬进内存。
-    那么问题是：这个布局，链接器是怎么"告诉"加载器的？
-
-不可能靠约定俗成。加载器是内核里的一段代码，它拿到的只是一个文件，
-必须能从文件本身读出"哪一段放哪、多大、什么权限"。
-
-**所以可执行文件里必须有一份说明书。规定这份说明书怎么写的，就是 ELF 格式。**
-
-> **ELF** = Executable and Linkable Format。
-> 注意名字里有两个词：Executable（可执行，给加载器用）
-> 和 Linkable（可链接，给链接器用）。
-> **一个格式同时服务两个完全不同的读者**，这是本篇后面一切复杂性的来源。
-
-Linux 下这三种文件全是 ELF，你已经都见过：
-
-    .o      目标文件      上一篇的 main.o，给链接器读
-    可执行  app           给加载器读
-    .so     共享库        两个都要读（第 05 篇讲）
-
----
-
-## 二、实验 1：确认它真的是一种"格式"
-
-### 2.1 目标：直接看字节，确认它真的是一种格式
-
-要证明一个文件有格式，最直接的办法是看它的字节。用 `hexdump -C`（`-C` =
-左边十六进制、右边可打印字符），管道接 `head` 只看开头。
-
-### 2.2 动手
-
-    hexdump -C app | head -2
-
-本机实测（ARM 版）：
-
-```
-00000000  7f 45 4c 46 01 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|
-00000010  03 00 28 00 01 00 00 00  dd 03 00 00 34 00 00 00  |..4...|
+```bash
+cd Knowledge/labs/00_basics/01_link_and_load
+arm-linux-gnueabihf-readelf -h app
 ```
 
-同一个程序编成 x86 版：
-
-```
-00000000  7f 45 4c 46 02 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|
-00000010  03 00 3e 00 01 00 00 00  40 10 00 00 00 00 00 00  |..>.....@.......|
-```
-
-### 2.3 逐字节读，两行就够
-
-**左边是偏移，中间是字节，右边是这些字节当 ASCII 字符看的样子。**
-
-看右边那列：`.ELF` —— 第 2、3、4 个字节就是字母 E、L、F 的 ASCII 码
-（0x45 0x4c 0x46）。第一个字节 0x7f 是个不可打印字符，所以显示成点。
-
-> **magic number（魔数）**：文件开头几个固定字节，用来标明"我是哪种文件"。
-> ELF 的魔数是 `7f 45 4c 46`。内核拿到一个文件，第一件事就是比对这 4 个字节，
-> 不对就直接拒绝执行。
-
-**再对比两行的差异，只有两处不同，而且都能解释：**
-
-    偏移 0x04:   ARM 是 01,  x86 是 02
-                 这一字节叫 EI_CLASS：01 = 32 位，02 = 64 位
-
-    偏移 0x12:   ARM 是 28 00,  x86 是 3e 00
-                 这两字节叫 e_machine，小端存放，所以真值是 0x0028 和 0x003e
-                 0x28 = 40  = EM_ARM
-                 0x3e = 62  = EM_X86_64
-
-**偏移 0x12 处这两个字节，就是"为什么 ARM 程序在 x86 上跑不了"的全部原因。**
-内核检查它，不匹配就返回 `ENOEXEC`（Exec format error）。
-这个报错你在 01 章第 3 节见过，在上一篇剥裸 bin 时也见过。
-
-（顺带：如果你手上有 ysyx 编出来的 RISC-V ELF，同一位置应该是 `f3 00`，
-0xf3 = 243 = EM_RISCV。可以拿来验一下。）
-
-### 2.4 用工具读同一份东西
-
-手数字节只适合验证魔数，字段一多就该用工具了：
-
-    arm-linux-gnueabihf-readelf -h app
-
-    -h = ELF header（文件头）
+- `readelf` 是读 ELF 文件的工具，`-h` 是文件头（ELF header）。
 
 本机实测：
 
-```
+```text
 ELF Header:
-  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 00
+  Magic:   7f 45 4c 46 01 01 01 00 00 00 00 00 00 00 00 
   Class:                             ELF32
   Data:                              2's complement, little endian
+  Version:                           1 (current)
+  OS/ABI:                            UNIX - System V
+  ABI Version:                       0
   Type:                              DYN (Position-Independent Executable file)
   Machine:                           ARM
+  Version:                           0x1
   Entry point address:               0x3dd
   Start of program headers:          52 (bytes into file)
   Start of section headers:          68172 (bytes into file)
+  Flags:                             0x5000400, Version5 EABI, hard-float ABI
+  Size of this header:               52 (bytes)
   Size of program headers:           32 (bytes)
   Number of program headers:         10
   Size of section headers:           40 (bytes)
@@ -149,668 +69,987 @@ ELF Header:
   Section header string table index: 28
 ```
 
-**把它和 2.2 的字节对起来看：**
-
-    Magic       就是那 16 个字节，一模一样
-    Class       ELF32     <- 来自偏移 0x04 的 01
-    Machine     ARM       <- 来自偏移 0x12 的 28 00
-
-**现在注意这四行，它们是本篇的骨架：**
-
-    Start of program headers:   52        program header table 在文件第 52 字节处
-    Number of program headers:  10        共 10 条
-    Start of section headers:   68172     section header table 在文件第 68172 字节处
-    Number of section headers:  29        共 29 条
-
-**一个文件里有两张表。** 一张 10 条，一张 29 条。
-两张表描述的是**同一份内容**，只是切法不同。这就是下一节的主题。
-
-还有一行要留意：
-
-    Entry point address: 0x3dd
-
-程序从这个地址开始执行。**它不是 main 的地址**（上一篇查过 main 在 0x4d8），
-而是 `_start`。第五节回来讲。
-
-### 2.5 判据
-
-    [ ] hexdump 出的前 4 字节是 7f 45 4c 46
-    [ ] ARM 版偏移 0x12 处是 28 00，x86 版是 3e 00
-    [ ] readelf -h 报的 Class / Machine 与你手数的字节一致
-    [ ] 能说出这个文件里有几条 program header、几条 section header（本机是 10 和 29）
-
-    注错见红：把偏移 0x12 那两个字节改掉，让内核认不出它。
-
-        cp app_x86 app_fake
-        printf '\xf3\x00' | dd of=app_fake bs=1 seek=18 conv=notrunc status=none
-        readelf -h app_fake | grep Machine        # 应该变成 RISC-V
-        ./app_fake                                # 必须 Exec format error
-
-    改 2 个字节，一个能跑的程序就废了。如果它还能跑，说明 dd 没写进去
-    （检查有没有漏掉 conv=notrunc，漏了会把文件截断成 2 字节）。
+先只看两处：**`Number of program headers: 10` 和
+`Number of section headers: 29`。一个文件里有两张表，一张 10 条，一张
+29 条。** 它们描述的是同一份内容，只是切法不同、读者不同。这两张表是
+本篇的骨架：第 2 节读文件头本身，第 3 节讲两张表的分工，第 4、5 节看
+加载器怎么用其中一张。
 
 ---
 
-## 三、section 和 segment：一份内容，两种切法
+## 1 一种格式，两个读者
 
-这是 ELF 最容易糊的地方，也是上一节那"两张表"的真面目。
+00 篇第 4.1 节看过 `main.o` 的身份：
 
-### 3.1 为什么会有两张表
-
-回到第一节那句话：**一个格式服务两个读者。** 两个读者的需求完全不同：
-
-    链接器关心    这个文件由哪些块组成？哪块是代码、哪块是符号表、
-                  哪块是重定位便条？我要按块合并
-                  --> 它需要的是 section 表（29 条，切得细）
-
-    加载器关心    这个文件的哪些部分要进内存？放到哪个地址？什么权限？
-                  符号表这种运行时用不着的东西，我一眼都不想看
-                  --> 它需要的是 segment 表（10 条，切得粗）
-
-于是同一份内容被切了两次：
-
-同一个 ELF 文件可以用两套目录查看：
-
-| 视角 | 谁使用 | 如何分组 | 典型项目 |
-|---|---|---|---|
-| 文件本身 | 所有人 | ELF header 后面跟实际字节内容 | 代码、数据、符号表、字符串等 |
-| section（本例 29 条） | 链接器 | 按用途细分 | `.text`、`.rodata`、`.data`、`.bss`、`.symtab`、`.strtab` |
-| segment（本例 10 条） | 加载器 | 按映射后的内存权限归堆 | `LOAD (R E)`、`LOAD (RW)`；符号表通常不装入内存 |
-
-> **segment（段）**：可执行文件里"要装进内存的一整块"，
-> 每个 segment 就是加载器的一次 mmap。**它是加载器的操作单位**，
-> 正如 section 是链接器的操作单位。
-
-    section  链接期的单位   编译器生成、链接器合并
-    segment  运行期的单位   链接器最后生成、加载器消费
-
-**注意 section 和 segment 不是并列的两批东西，是同一批字节的两种分组方式。**
-一个 segment 通常包含好几个 section。
-
-### 3.2 动手：让 ELF 自己把对应关系说出来
-
-上面那句"一个 segment 包含好几个 section"，不用信我，readelf 直接给出对照表：
-
-    arm-linux-gnueabihf-readelf -l big1
-
-    -l = program headers，也就是 segment 表
-         （记法：-l 的全称是 --segments，但字母是 l，来自旧名 "program header layout"）
-
-本机实测，先看上半部分：
-
+```text
+main.o: ELF 32-bit LSB relocatable, ARM, EABI5 version 1 (SYSV), not stripped
 ```
+
+而 `app` 是：
+
+```text
+app: ELF 32-bit LSB pie executable, ARM, EABI5 version 1 (SYSV), ...
+```
+
+目标文件和可执行文件是同一种格式。ELF 的全称 Executable and Linkable
+Format 里有两个词：Executable（可执行，给运行时的加载器用）和 Linkable
+（可链接，给编译时的链接器用）。**一个格式要同时服务两个完全不同的
+读者**，这是本篇后面一切结构的总根源：
+
+```text
+链接器关心   这个文件由哪些块组成？哪块是代码、哪块是符号表、
+             哪块是重定位便条？要按块合并
+             --> 需要切得细的表：section 表（本例 29 条）
+
+加载器关心   文件的哪些部分要进内存？放到哪个地址？什么权限？
+             符号表这种运行时用不着的东西一眼都不想看
+             --> 需要切得粗的表：program header 表（本例 10 条）
+```
+
+Linux 下三种常见的文件都是 ELF，区别只在文件头里一个叫 `e_type` 的字段：
+
+```text
+e_type = 1 (REL)   可重定位文件    .o，给链接器读
+e_type = 2 (EXEC)  可执行文件      加载地址固定的程序
+e_type = 3 (DYN)   共享库，或 PIE 程序（教程 01 篇第 3.7 节讲过 PIE 为什么标 DYN）
+```
+
+`app` 的 `Type: DYN` 就是第三种。三种文件共享同一套文件头、同一套表的
+格式，所以 `readelf`、`nm`、`objdump` 这些工具对它们全都适用。
+
+**这一节搭好的积木**：ELF 是同一份内容的两种切法：section 给链接器，
+segment 给加载器；`e_type` 区分 `.o`、可执行文件和库。接下来的问题：
+文件头那 52 个字节，每个都是什么。
+
+---
+
+## 2 文件头：52 个字节逐个读
+
+### 2.1 原始字节和字段的对照
+
+32 位 ELF 的文件头正好 52 字节（`Size of this header: 52`）。把 `app`
+的前 52 个字节原样打出来：
+
+```bash
+hexdump -C app | head -4
+```
+
+- `hexdump -C`：左边偏移、中间十六进制、右边把字节当字符显示。
+
+本机实测：
+
+```text
+00000000  7f 45 4c 46 01 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|
+00000010  03 00 28 00 01 00 00 00  dd 03 00 00 34 00 00 00  |..(.........4...|
+00000020  4c 0a 01 00 00 04 00 05  34 00 20 00 0a 00 28 00  |L.......4. ...(.|
+00000030  1d 00 1c 00 01 00 00 70  48 06 00 00 48 06 00 00  |.......pH...H...|
+```
+
+逐字段对照（全部小端，多字节字段要把字节倒过来读）：
+
+```text
+偏移   字节              字段名        值            含义
+0x00   7f 45 4c 46       e_ident[0..3] 魔数          0x7f 后接 'E' 'L' 'F'
+0x04   01                e_ident[4]    EI_CLASS     1 = 32 位（2 = 64 位）
+0x05   01                e_ident[5]    EI_DATA      1 = 小端
+0x06   01                e_ident[6]    EI_VERSION   1
+0x07   00                e_ident[7]    EI_OSABI     0 = System V
+0x08   00 * 8            e_ident[8..15]             填充，全 0
+0x10   03 00             e_type        3            DYN（PIE 可执行）
+0x12   28 00             e_machine     0x28 = 40    EM_ARM
+0x14   01 00 00 00       e_version     1
+0x18   dd 03 00 00       e_entry       0x3dd        入口地址
+0x1c   34 00 00 00       e_phoff       52           program header 表的位置
+0x20   4c 0a 01 00       e_shoff       68172        section 表的位置
+0x24   00 04 00 05       e_flags       0x05000400   EABI5 + hard-float
+0x28   34 00             e_ehsize      52           文件头自身大小
+0x2a   20 00             e_phentsize   32           每条 program header 大小
+0x2c   0a 00             e_phnum       10           program header 条数
+0x2e   28 00             e_shentsize   40           每条 section header 大小
+0x30   1d 00             e_shnum       29           section header 条数
+0x32   1c 00             e_shstrndx    28           section 名字表的下标
+```
+
+读法和 教程 01 篇第 3.3 节相同：每两个十六进制数字是一个字节，多字节字段
+小端存放。教程 01 篇只读了前 20 个字节里的四个字段（魔数、位宽、字节序、
+`e_machine`），因为回答"为什么被拒绝"只需要它们。这里把 52 个字节读全。
+
+和第 0 节 `readelf -h` 的逐行输出对一遍：每一行都能在这张表里找到对应
+的字节。`readelf` 做的事就是按这张表把字节翻成文字，没有任何神秘之处。
+
+### 2.2 内核真正检查的，只是其中几行
+
+教程 01 篇第 3.4 节讲过：内核的 ELF 处理器（`fs/binfmt_elf.c` 的
+`load_elf_binary`）先做几项一致性检查，不过就放弃。对照 v4.9 内核源码，
+检查依次是：
+
+```c
+if (memcmp(loc->elf_ex.e_ident, ELFMAG, SELFMAG) != 0)   /* 魔数 */
+	goto out;
+if (loc->elf_ex.e_type != ET_EXEC && loc->elf_ex.e_type != ET_DYN)
+	goto out;                                             /* e_type */
+if (!elf_check_arch(&loc->elf_ex))
+	goto out;                                             /* e_machine 等 */
+```
+
+`elf_check_arch` 是各架构自己实现的。ARM 版的在
+`arch/arm/kernel/elf.c`，第一刀就是：
+
+```c
+/* Make sure it's an ARM executable */
+if (x->e_machine != EM_ARM)
+	return 0;
+```
+
+返回 0 表示"不归我管"，内核接着问下一个处理器；都不认领，`execve` 返回
+`ENOEXEC`，就是 教程 01 篇第 3.1 节的退出码 126。这张 52 字节的表里，决定
+"能不能在这台机器上跑"的只是 `e_ident` 前 4 字节、`e_type` 和
+`e_machine` 三处；其余字段是"跑起来要怎么摆"的说明书。
+
+顺带核一个数字：教程 01 篇第 3.4 节说"内核先把文件开头一小段读进来，较新的
+内核读 256 字节，4.9 内核读 128 字节"。这个长度是
+`include/uapi/linux/binfmts.h` 里的 `BINPRM_BUF_SIZE`：v4.9 里是 128，
+v6.6 里是 256。52 字节的文件头在任何版本里都装得下。
+
+### 2.3 e_machine 还有哪些值
+
+`e_machine` 的编号是 ELF 标准统一分配的。改字节实验可以再造一个佐证：
+把 x86 版程序（`e_machine` 是 `3e 00` = 62）的这两个字节改成
+`f3 00`（0xf3 = 243，RISC-V）：
+
+```bash
+cp app_x86 app_rv
+printf '\xf3\x00' | dd of=app_rv bs=1 seek=18 conv=notrunc status=none
+readelf -h app_rv | grep Machine
+./app_rv; echo "exit=$?"
+```
+
+- `printf '\xf3\x00' | dd ... seek=18 conv=notrunc`：教程 01 篇第 3.5 节的同一
+  手法，把位置 18 起的两个字节改成 `f3 00`。`conv=notrunc` 不能省，否则
+  `dd` 写完会把文件截断（第 3.6 节有这个教训的完整版）。
+
+本机实测：
+
+```text
+  Machine:                           RISC-V
+bash: ./app_rv: cannot execute binary file: Exec format error
+exit=126
+```
+
+`readelf` 认出了 RISC-V，内核的 ARM/x86 检查都不认领，126。常见的编号：
+
+```text
+40    EM_ARM       板子的架构
+62    EM_X86_64    电脑的架构
+243   EM_RISCV
+183   EM_AARCH64   64 位 ARM
+```
+
+### 2.4 入口地址 0x3dd 的末位为什么是个 1
+
+`Entry point address: 0x3dd`，而 `nm` 查到的 `_start` 在 0x3dc：
+
+```text
+$ arm-linux-gnueabihf-nm app | grep -E ' (_start|main)$'
+000003dc T _start
+000004d8 T main
+```
+
+差 1 不是打印错误。ARM 有两套指令编码（ARM 态和 Thumb 态），切换靠程序
+状态寄存器里的 T 位；跳转到一个"末位为 1 的地址"就是"跳到那个地址并
+进入 Thumb 态"的意思。`0x3dd` 的真实含义是"入口在 0x3dc，用 Thumb 态
+执行"。内核里兑现这个约定的代码在 `arch/arm/include/asm/processor.h`
+的 `start_thread`：
+
+```c
+if (elf_hwcap & HWCAP_THUMB && pc & 1)
+	regs->ARM_cpsr |= PSR_T_BIT;
+...
+regs->ARM_pc = pc & ~1;		/* pc */
+```
+
+末位拿出来设进 T 位，地址本身清掉末位再交给 PC。容易以为入口地址必须
+是偶数、0x3dd 是文件坏了；实测它和 `_start` 正好差 1；原因是 ARM 用
+地址末位当指令集标记。
+
+### 2.5 [判] 第 1、2 节
+
+    [ ] hexdump 前 4 字节是 7f 45 4c 46
+    [ ] ARM 版偏移 0x12 处是 28 00，x86 版是 3e 00
+    [ ] readelf -h 的 Class 与手数的第 4 字节一致（ELF32 / ELF64）
+    [ ] Entry point 不等于 main 的地址；等于 _start 的地址 + 1
+    [ ] 说得出 e_phoff/e_phnum 和 e_shoff/e_shnum 各指向哪张表
+
+    注错见红：把 e_machine 改成 f3 00（2.3 节的做法），readelf 必须
+    改报 RISC-V，运行必须是 126。如果运行成功了，说明这台机器登记过
+    别的格式处理器（教程 01 篇第 3.6 节的 binfmt_misc），先去看
+    /proc/sys/fs/binfmt_misc/。
+
+以上判据由 `check.sh` 自动核对。
+
+**这一节搭好的积木**：文件头 52 字节逐个对得上；内核只检查其中三处决定
+认不认；`e_entry` 指向 `_start`，末位是 Thumb 标记。接下来的问题：文件头
+指着的两张表，各自长什么样、给谁用。
+
+---
+
+## 3 两张表：section 与 segment
+
+### 3.1 先把 10 条 program header 读完
+
+`readelf -l`（小写 L）读 program header 表：
+
+```bash
+arm-linux-gnueabihf-readelf -lW app
+```
+
+- `-W`：wide，允许输出超过 80 列不换行，保证每行是一条完整的记录。
+
+本机实测：
+
+```text
 Elf file type is DYN (Position-Independent Executable file)
 Entry point 0x3dd
 There are 10 program headers, starting at offset 52
 
 Program Headers:
   Type           Offset   VirtAddr   PhysAddr   FileSiz MemSiz  Flg Align
-  ARM_EXIDX      0x00061c 0x0000061c 0x0000061c 0x00008 0x00008 R   0x4
+  ARM_EXIDX      0x000648 0x00000648 0x00000648 0x00008 0x00008 R   0x4
   PHDR           0x000034 0x00000034 0x00000034 0x00140 0x00140 R   0x4
   INTERP         0x000198 0x00000198 0x00000198 0x00019 0x00019 R   0x1
       [Requesting program interpreter: /lib/ld-linux-armhf.so.3]
-  LOAD           0x000000 0x00000000 0x00000000 0x00648 0x00648 R E 0x10000
-  LOAD           0x00fed0 0x0001fed0 0x0001fed0 0x00138 0x3d0a3c RW  0x10000
+  LOAD           0x000000 0x00000000 0x00000000 0x00674 0x00674 R E 0x10000
+  LOAD           0x00fed0 0x0001fed0 0x0001fed0 0x0013c 0x00144 RW  0x10000
   DYNAMIC        0x00fed8 0x0001fed8 0x0001fed8 0x000f8 0x000f8 RW  0x4
   NOTE           0x000174 0x00000174 0x00000174 0x00024 0x00024 R   0x4
-  NOTE           0x000628 0x00000628 0x00000628 0x00020 0x00020 R   0x4
+  NOTE           0x000654 0x00000654 0x00000654 0x00020 0x00020 R   0x4
   GNU_STACK      0x000000 0x00000000 0x00000000 0x00000 0x00000 RW  0x10
   GNU_RELRO      0x00fed0 0x0001fed0 0x0001fed0 0x00130 0x00130 R   0x1
-```
 
-**先只看两列：Type 和 Flg。**
-
-    Type = LOAD    "把我装进内存"。只有这种需要真的搬运
-                   10 条里只有 2 条是 LOAD
-    Type = 其他    不是要装进内存的内容，是给加载器的额外指示：
-                   INTERP     我需要一个解释器，路径写在下面那行
-                   DYNAMIC    动态链接的信息在这里
-                   GNU_STACK  栈要不要可执行（这里是 RW，不可执行，防攻击）
-                   PHDR       表自己的位置
-
-    Flg = R E      可读、可执行 -> 代码
-    Flg = RW       可读、可写   -> 数据
-
-**上一篇 `/proc/self/maps` 里看到的 r-xp 和 rw-p，源头就在这两行 LOAD 的 Flg 列。**
-
-再看输出的下半部分，readelf 直接把两张表的对应关系列了出来：
-
-```
  Section to Segment mapping:
   Segment Sections...
-   00     .ARM.exidx
-   01
-   02     .interp
-   03     .note.gnu.build-id .interp .gnu.hash .dynsym .dynstr .gnu.version
-          .gnu.version_r .rel.dyn .rel.plt .init .plt .text .fini .rodata
-          .ARM.exidx .eh_frame .note.ABI-tag
-   04     .init_array .fini_array .dynamic .got .data .bss
-   05     .dynamic
-   06     .note.gnu.build-id
-   07     .note.ABI-tag
-   08
-   09     .init_array .fini_array .dynamic .got
+   00     .ARM.exidx 
+   01     
+   02     .interp 
+   03     .note.gnu.build-id .interp .gnu.hash .dynsym .dynstr .gnu.version .gnu.version_r .rel.dyn .rel.plt .init .plt .text .fini .rodata .ARM.exidx .eh_frame .note.ABI-tag 
+   04     .init_array .fini_array .dynamic .got .data .bss 
+   05     .dynamic 
+   06     .note.gnu.build-id 
+   07     .note.ABI-tag 
+   08     
+   09     .init_array .fini_array .dynamic .got 
 ```
 
-**这张表是本节的核心证据。逐行读：**
+上半部分 10 条记录，每条 7 列。先认 `Type` 一列，10 条分两类：
 
-    编号 03 就是第一条 LOAD（R E）。它一个人装了 16 个 section，
-    包括 .text（你的代码）和 .rodata（字符串常量）。
-    共同点：运行时都只需要读和执行，不需要写。
+- **`LOAD`（2 条）：真正要进内存的。** "把文件里 Offset 起、FileSiz 那么
+  长的字节，映射到虚拟地址 VirtAddr，权限按 Flg"。第一条 `R E` 是代码
+  加只读数据，第二条 `RW` 是可写数据。加载器真正搬的只有这两条。
+- **其余 8 条：给加载器和动态链接器的附加指示，不搬运内容。**
 
-    编号 04 就是第二条 LOAD（RW）。装了 .data、.bss、.got 等 6 个。
-    共同点：运行时要写。
+  ```text
+  INTERP      我需要一个解释器（动态链接器），路径在 Offset 指着的
+              地方：/lib/ld-linux-armhf.so.3。教程 01 篇第 3.5 节那个
+              退出码 127，就是内核去打开这个路径失败
+  DYNAMIC     动态链接信息（要哪些库、符号怎么填）的位置，
+              给 ld.so 用
+  NOTE        附注，比如这个文件的构建 ID
+  GNU_STACK   栈的权限声明。这里 Flg 是 RW，没有 E：
+              栈不可执行，防一类注入攻击
+  GNU_RELRO   这一块在重定位完成后要改成只读（00 篇第 7.3 节
+              maps 里数据段被拆成两行，就是它干的）
+  PHDR        program header 表自己在内存里的位置
+  ARM_EXIDX   ARM 的异常处理索引，栈展开时用
+  ```
 
-    **一个 section 可以出现在多个 segment 里**（.interp 在 02 和 03 都有，
-    .dynamic 在 04、05、09 都有）。因为分组方式不同，同一批字节
-    在不同视角下归属不同。这也再次说明它们不是两批东西。
+  `INTERP` 那条的路径可以直接从文件里读出来：
 
-**最关键的是，数一数上表里出现过的 section 名字，只有二十来个，
-而 `readelf -h` 说这个文件有 29 个 section。剩下的去哪了？**
+  ```bash
+  arm-linux-gnueabihf-readelf -p .interp app
+  ```
 
-它们不属于任何 segment，也就是**运行时根本不进内存**。
-`.symtab`、`.strtab`、`.comment`、`.shstrtab` 这些，
-是上一篇里 `nm` 和 `readelf -r` 读的那些工具用元信息。
-程序跑起来完全不需要它们。
+  本机实测：
 
-这就引出下一个实验。
+  ```text
+  String dump of section '.interp':
+    [     0]  /lib/ld-linux-armhf.so.3
+  ```
 
-### 3.3 动手：把不进内存的东西删掉，看程序还跑不跑
+  它就是文件 Offset 0x198 处存着的一串以 `\0` 结尾的字符。
 
-这是本篇最值得亲手做的实验。**它一次性把 section 和 segment 的区别钉死。**
+再看 `VirtAddr` 和 `Offset` 两列的一个规律：第二条 LOAD 的 Offset 是
+`0xfed0`，VirtAddr 是 `0x1fed0`，两者不等，但差值 `0x1f000` 正好是
+Align（`0x10000`）的整数倍。第一条 LOAD 两个都是 0，也对得上。这不是
+巧合：加载靠 `mmap` 按页映射，页对齐要求"文件偏移和虚拟地址对页面大小
+同余"，链接器排布局时必须遵守，于是把同余关系直接写进了表里。验证：
+两个地址分别对 0x10000 取余，都是 `0xed0`。
 
-先问一句：如果 `.symtab` 真的不进内存，那把它从文件里删掉，
-程序应该照常运行。怎么删？
+### 3.2 下半部分：两张表的对应关系
 
-    提示：binutils 里有个专门干这事的工具，名字就叫 strip（剥掉）。
-          它的默认行为就是删符号表。
+`Section to Segment mapping` 是 readelf 把两张表对照着列出来的结果，
+也是本节的核心证据。逐行读：
 
-用 x86 版做，因为**要真的运行看结果**：
+- 编号 03 是第一条 LOAD（R E），一个段装了 16 个 section，包括 `.text`
+  （代码）和 `.rodata`（只读数据）。共同点：运行时只需要读和执行。
+- 编号 04 是第二条 LOAD（RW），装了 `.data`、`.bss`、`.got` 等 6 个。
+  共同点：运行时要写。
+- **一个 section 可以出现在多个段里**：`.interp` 在 02 和 03 都有，
+  `.dynamic` 在 04、05、09 都有。同一批字节在不同视角下归属不同，
+  这再次说明 section 和 segment 不是两批东西，是同一批字节的两种分组。
+- 数一下映射表里出现过的 section 名，只有二十来个；而文件头说这个文件
+  有 29 个 section。没出现的（`.symtab`、`.strtab`、`.comment`、
+  `.shstrtab` 等）**不属于任何段，运行时根本不进内存**。它们是 00 篇
+  第 4 节里 `nm`、`readelf -r` 读的那些工具用表。
 
-    cd Knowledge/labs/00_basics/01_link_and_load
-    cp app_x86 app_strip
-    ./app_x86;    echo "退出码=$?"      # 先记下正常时的行为
-    strip app_strip
-    ./app_strip;  echo "退出码=$?"
+一句话收拢：**section 是链接期的单位，编译器生成、链接器合并；
+segment 是运行期的单位，链接器最后生成、加载器消费。**
+
+### 3.3 实验：把不进内存的东西删掉
+
+如果 ".symtab 不进内存" 是真的，把它从文件里删掉，程序应该照常运行。
+`strip`（剥掉）就是干这个的工具。因为要真的运行看结果，这一组实验用
+x86 版（`app_x86`，同一批源码用本机 gcc 编的）：
+
+```bash
+cp app_x86 app_strip
+./app_x86; echo "退出码=$?"
+strip app_strip
+./app_strip; echo "退出码=$?"
+```
 
 本机实测：
 
-```
+```text
 --- strip 前 ---
--rwxrwxrwx  15888  app_x86
-section 数: 30
-运行退出码 = 3
-
+文件大小 15888，section 29 个，program header 14 条
+退出码=3
 --- strip 后 ---
--rwxrwxrwx  14328  app_strip
-section 数: 28
-运行退出码 = 3
+文件大小 14328，section 27 个，program header 14 条
+退出码=3
 ```
 
-（退出码 3 是对的：程序是 `return add(g_init,2) + g_bss`，
-即 `add(1,2) + 0 = 3`。**退出码本身就是"程序真的正确跑完了"的判据。**）
+（退出码 3 是对的：程序是 `return add(g_init,2) + g_bss`，即
+`add(1,2) + 0 = 3`。**退出码本身就是"程序真的正确跑完了"的判据。**）
 
-**现象：文件小了 1560 字节，section 少了 2 个，程序行为完全不变。**
+文件小了 1560 字节，section 少了 2 个，段一条没少，行为完全不变。少的
+是哪两个？对比两份 section 名单：
 
-少的是哪两个？
+```text
+< .strtab
+< .symtab
+```
 
-    diff <(readelf -S app_x86 | grep -oE '\.[a-z_.]+' | sort -u) \
-         <(readelf -S app_strip | grep -oE '\.[a-z_.]+' | sort -u)
+正是第 3.2 节推断"不属于任何段"的那两个。推断被实验证实。
 
-    < .strtab
-    < .symtab
+### 3.4 更极端：把整张 section 表删掉
 
-正是 3.2 里推断"不属于任何 segment"的那两个。**推断被实验证实了。**
-
-再确认 segment 数没变：
-
-    strip 前: 16 条 program header
-    strip 后: 16 条
-
-一条没少。**因为 strip 动的全是"加载器视野之外"的东西。**
-
-### 3.4 动手：把整张 section 表都删掉
-
-上一步只删了两个 section，还可以更极端，**把 29 条 section header 全删了**，
-让这个文件在链接器眼里彻底不成立：
-
-    cp app_x86 app_nosh
-    strip --strip-section-headers app_nosh
-    readelf -h app_nosh | grep 'Number of section headers'
-    ./app_nosh; echo "退出码=$?"
+```bash
+cp app_x86 app_nosh
+strip --strip-section-headers app_nosh
+readelf -h app_nosh | grep -E 'Number of section|Start of section'
+./app_nosh; echo "退出码=$?"
+```
 
 本机实测：
 
+```text
+  Start of section headers:          0 (bytes into file)
+  Number of section headers:         0
+退出码=3
 ```
-Number of section headers:         0
-Start of section headers:          0 (bytes into file)
-文件大小: 15888 -> 12308
-退出码 = 3
+
+29 条 section header 全没了，文件从 15888 缩到 12308 字节，程序照跑，
+退出码还是 3。这时候 `readelf -S app_nosh` 什么都读不出来，`nm` 也废了，
+所有链接期工具全瞎；内核毫不在意，因为它从头到尾没看过那张表。
+
+### 3.5 反过来：只改 segment 表的条数
+
+不动任何内容，只把文件头里"program header 有几条"（x86-64 的 `e_phnum`
+在偏移 56 处）改成 0，一共 2 个字节：
+
+```bash
+cp app_x86 app_noph
+printf '\x00\x00' | dd of=app_noph bs=1 seek=56 conv=notrunc status=none
+./app_noph; echo "退出码=$?"
+stat -c %s app_noph
 ```
-
-**section 表整个不存在了，文件小了 3580 字节，程序照跑，结果一模一样。**
-
-这时候 `readelf -S app_nosh` 什么都读不出来，`nm` 也废了，所有链接期工具全瞎。
-但内核毫不在意，因为内核从头到尾就没看过那张表。
-
-### 3.5 动手：反过来，动 segment 试试
-
-现在做反向实验。**不删任何内容，只把 ELF 头里"segment 有几条"这个数字改成 0。**
-一共改 2 个字节。
-
-    cp app_x86 app_noph
-    printf '\x00\x00' | dd of=app_noph bs=1 seek=56 conv=notrunc status=none
-    ./app_noph; echo "退出码=$?"
-
-    seek=56  x86-64 ELF 头里 e_phnum（program header 数量）在偏移 56 处
-    conv=notrunc  只覆盖这 2 个字节，不要把文件截断（漏了这个文件就毁了）
 
 本机实测：
 
+```text
+bash: ./app_noph: cannot execute binary file: Exec format error
+退出码=126
+15888
 ```
-cannot execute binary file: Exec format error
-退出码 = 126
+
+文件一个字节没少（还是 15888），只是声明"我有 0 条 program header"，
+内核就不认了。对照 v4.9 源码，ELF 处理器在 `load_elf_phdrs` 里检查
+`e_phnum < 1` 就直接放弃。
+
+三组实验并排放：
+
+```text
+改动                              文件变化       能跑吗
+strip 掉 .symtab/.strtab          -1560 字节     能，退出码 3
+删掉整张 section 表               -3580 字节     能，退出码 3
+只改 2 个字节让 e_phnum = 0       0 字节         不能，126
 ```
 
-### 3.6 把两组实验并排放
+删掉三千多字节照样跑，改两个字节直接死。**section 是给编译工具看的，
+运行时不需要；segment 是给内核看的，少一条都装不起来。** 这也解释了
+两件常见的事：发布固件前要 `strip`，白省空间零代价；`strip` 之后 gdb
+看不到函数名，因为 gdb 是链接期视角的工具，读的正是被删掉的那张表。
 
-**这张表就是整节的结论：**
+### 3.6 注错：同一个报错，两种死因
 
-    改动                             文件变化      能跑吗
-    ------------------------------   -----------   -----------------------
-    strip 掉 .symtab/.strtab         -1560 字节    能，退出码 3
-    删掉整张 section header table    -3580 字节    能，退出码 3
-    只改 2 个字节，让 segment 数 = 0  0 字节       不能，Exec format error
+3.5 节那条 `dd` 如果漏了 `conv=notrunc`：
 
-**删掉三千多字节照样跑，改两个字节直接死。**
+```bash
+cp app_x86 app_trunc
+printf '\x00\x00' | dd of=app_trunc bs=1 seek=56 status=none
+```
 
-    section  是给编译工具看的。运行时不需要，删了不影响执行
-    segment  是给内核看的。少一条都装不起来
+`dd` 默认把输出文件截断到写入位置，15888 字节的程序只剩 58 字节。
+本机实测：
 
-这也解释了嵌入式里为什么发布固件前要 strip：白省的空间，零代价。
-而"strip 之后 gdb 就看不到函数名了"也是同一件事的另一面 ——
-gdb 是链接期视角的工具，它读的正是被你删掉的那张表。
+```text
+$ stat -c %s app_trunc
+58
+$ readelf -h app_trunc
+readelf: Error: app_trunc: Failed to read file header
+$ ./app_trunc
+bash: ./app_trunc: cannot execute binary file: Exec format error
+```
 
-### 3.7 判据
+运行时报错和 3.5 节一模一样，退出码都是 126，但死因完全不同：一个是
+文件完好、内核读完了不认；另一个是文件被截得只剩头都凑不齐。分辨靠
+`ls -l` 的大小和 `readelf` 能不能读，不是看报错文字。**同一个报错可以
+来自完全不同的原因，光看报错文字会误判。**
 
-    [ ] readelf -l 的 Section to Segment mapping 里，能指出 .text 属于哪条 LOAD，
-        .data 属于哪条，并说出两条 LOAD 的 Flg 分别是什么
-    [ ] 找出至少两个不属于任何 segment 的 section
-    [ ] strip 后文件变小、section 变少、segment 数不变、退出码不变
-    [ ] --strip-section-headers 后 section 数为 0，程序仍能跑出同样的退出码
-    [ ] 把 e_phnum 改成 0 后，必须 Exec format error
+### 3.7 顺带：剥成裸 bin 还剩什么
 
-    注错见红：3.5 那条命令里去掉 conv=notrunc 再跑一次。本机实测：
+裸机开发里常见一步 `objcopy -O binary`，把 ELF 剥成纯字节流再烧进
+flash。它扔掉的正是本篇讲的全部东西：
 
-        截断后大小: 58 字节 (原 15888)
-        $ readelf -h app_trunc
-        readelf: Error: app_trunc: Failed to read file header
-        $ ./app_trunc
-        cannot execute binary file: Exec format error   (退出码同样是 126)
+```bash
+objcopy -O binary app_x86 app.bin
+chmod +x app.bin
+ls -l app.bin
+./app.bin; echo "exit=$?"
+```
 
-    **注意运行时的报错和 3.5 一模一样，但这是两种完全不同的失败。**
-    dd 默认会把输出文件截断到写入位置，15888 字节的程序只剩 58 字节。
-    分辨方法不是看运行报错，是看 `ls -l` 的大小和 readelf 能不能读。
-    这条本身就是个教训：**同一个报错可以来自完全不同的原因，
-    光看报错文字会误判。**
-    （做完把 app_trunc 删掉，别拿它当 3.5 的结果。）
+本机实测：
+
+```text
+-rwxrwxrwx 1 glorinz glorinz 15556 ... app.bin
+bash: ./app.bin: cannot execute binary file: Exec format error
+exit=126
+```
+
+15556 字节，只剩 LOAD 段里的原始字节；文件头、两张表全部不在了。内核
+第一步就比不出魔数，126。裸机上这种文件能跑，是因为那边没有加载器：
+烧写工具把整个文件放到链接时写死的地址，CPU 上电直接跳过去，"放哪、
+什么权限"这些问题根本不存在。有了操作系统和多进程，这些问题必须回答，
+答案就写在 program header 里。这是"裸机用 .bin、Linux 用 ELF"的根本原因。
+
+### 3.8 [判] 第 3 节
+
+    [ ] readelf -lW 的 Section to Segment mapping 里，能指出 .text
+        属于 R E 的那条 LOAD，.data 属于 RW 的那条
+    [ ] 两条 LOAD 的 VirtAddr 与 Offset 对 Align 同余
+    [ ] 找得出不属于任何段的 section（.symtab / .strtab）
+    [ ] strip 后文件变小、section 变少、段数不变、退出码不变
+    [ ] --strip-section-headers 后 section 数为 0，程序照跑
+    [ ] e_phnum 改成 0 后必须 126，且文件大小不变
+    [ ] objcopy -O binary 的产物执行必须 126
+
+    注错见红：3.5 节的 dd 漏掉 conv=notrunc，得到的必须是 58 字节
+    的残件，readelf 报错，而不是一个"能跑到别处的程序"。
+
+**这一节搭好的积木**：section 给链接器、segment 给加载器，10 条
+program header 里只有 LOAD 真正搬运；INTERP 写着动态链接器的路径；
+内核不看 section 表。接下来的问题：LOAD 那行里 FileSiz 和 MemSiz 两个
+数不一样大，差出来的是什么。
 
 ---
 
-## 四、.bss：文件里不存，内存里要有
+## 4 .bss：文件里不存，内存里要有
 
-上一篇提过 `.bss` 是 NOBITS，说"下一篇讲"。现在讲。
+### 4.1 两个只差一点初值的程序
 
-### 4.1 目标：看一个零初始化的大数组在文件里占不占地方
-
-两个全局变量：
-
-```c
-int g_init = 1;     /* 有初值 */
-int g_bss;          /* 无初值，C 标准规定它初值是 0 */
-```
-
-`g_init` 的那个 1 必须存在文件里，否则加载后不知道该填几；`g_bss` 的 0 呢？
-如果不在文件里存，加载器怎么知道要清多少？把数组放大到一百万项，看文件大小
-和内存大小各自怎么变。
-
-### 4.2 动手
-
-    cd Knowledge/labs/02_gcc
-
-`big1.c`：数组不给初值 -> 进 .bss
+`big1.c`：
 
 ```c
 int arr[1000000];
-int main(void){ return arr[0]; }
+
+int main(void)
+{
+	return arr[0];
+}
 ```
 
-`big2.c`：数组给了初值 -> 进 .data
+`big2.c`，只多了一个初值 `{1}`（第一个元素是 1，其余按 C 的规则补 0）：
 
 ```c
 int arr[1000000] = {1};
-int main(void){ return arr[0]; }
+
+int main(void)
+{
+	return arr[0];
+}
 ```
 
-    arm-linux-gnueabihf-gcc -o big1 big1.c
-    arm-linux-gnueabihf-gcc -o big2 big2.c
-    ls -l big1 big2
+编译并看大小：
+
+```bash
+arm-linux-gnueabihf-gcc -o big1 big1.c
+arm-linux-gnueabihf-gcc -o big2 big2.c
+ls -l big1 big2
+```
 
 本机实测：
 
+```text
+-rwxrwxrwx 1 glorinz glorinz   69236 ... big1
+-rwxrwxrwx 1 glorinz glorinz 4069236 ... big2
 ```
--rwxrwxrwx 1 glorinz glorinz   69236 big1
--rwxrwxrwx 1 glorinz glorinz 4069236 big2
+
+4069236 - 69236 = 4000000，正好是 1000000 个 `int`（每个 4 字节），一个
+字节不多不少。`g_init` 的那个 1 必须存在文件里，否则加载后不知道该填几；
+`arr` 的一百万个 0 呢？一个没给初值、一个给了，文件差了整整 4 MB。
+
+### 4.2 两个数组去了不同的箱子
+
+```bash
+arm-linux-gnueabihf-readelf -SW big1 | grep -E '\.(data|bss) '
+arm-linux-gnueabihf-readelf -SW big2 | grep -E '\.(data|bss) '
 ```
-
-    4069236 - 69236 = 4000000
-    = 1000000 个 int x 4 字节，一个字节不多不少
-
-### 4.3 看 section：两个数组去了不同的箱子
-
-    arm-linux-gnueabihf-readelf -S big1 | grep -E '\.data|\.bss'
-    arm-linux-gnueabihf-readelf -S big2 | grep -E '\.data|\.bss'
 
 本机实测：
 
+```text
+big1:  [22] .data   PROGBITS  00020000 010000 000008 00  WA
+       [23] .bss    NOBITS    00020008 010008 3d0904 00  WA
+big2:  [22] .data   PROGBITS  00020000 010000 3d0908 00  WA
+       [23] .bss    NOBITS    003f0908 3e0908 000004 00  WA
 ```
-big1:  [22] .data   PROGBITS  00020000 010000 000008 ...  WA
-       [23] .bss    NOBITS    00020008 010008 3d0904 ...  WA
 
-big2:  [22] .data   PROGBITS  00020000 010000 3d0908 ...  WA
-       [23] .bss    NOBITS    003f0908 3e0908 000004 ...  WA
+对照 Size 列（第 6 个字段）：big1 的 `.bss` 是 0x3d0904 = 4000004 字节，
+big2 的 `.data` 是 0x3d0908。**只因为多写了 `= {1}`，一百万项的数组整个
+从 `.bss` 挪到了 `.data`。** 符号表能确认这一点（`readelf -s` 输出里
+`arr` 那行的第 7 列是 section 下标，big1 里是 23 即 `.bss`，big2 里是
+22 即 `.data`）。
+
+Type 列的两个词是这里的钥匙：
+
+```text
+PROGBITS   文件里真的存着这些字节   -> 占文件空间
+NOBITS     文件里不存，只记一个大小 -> 不占文件空间
 ```
 
-**逐列对照（Size 那一列是第 6 个数字）：**
+00 篇第 3 节汇编里的 `.word 1` 对 `.space 4`，到这里收拢成文件格式层面
+的两个类型。
 
-              .data Size    .bss Size     Type
-    big1      0x000008      0x3d0904      .bss 是 NOBITS
-    big2      0x3d0908      0x000004      .data 是 PROGBITS
+### 4.3 加载器怎么知道要清多少零
 
-    0x3d0904 = 4,000,004 字节，就是那个数组（多出的 4 字节是别的变量）
+`.bss` 不在文件里，加载器总得知道清多大一块。答案在 program header 里，
+回到 RW 那条 LOAD 的两列：
 
-**数组整个从 .bss 挪到了 .data。** 只因为你多写了 ` = {1}`。
-
-    PROGBITS   "文件里真的有这些字节"    -> 占文件空间
-    NOBITS     "文件里没有，只记大小"     -> 不占文件空间
-
-### 4.4 看 segment：加载器怎么知道要清多少零
-
-这才是关键的一步。回到 segment 表：
-
-    arm-linux-gnueabihf-readelf -l big1 | grep -E '^  LOAD'
-    arm-linux-gnueabihf-readelf -l big2 | grep -E '^  LOAD'
+```bash
+arm-linux-gnueabihf-readelf -lW big1 | grep '^  LOAD'
+arm-linux-gnueabihf-readelf -lW big2 | grep '^  LOAD'
+```
 
 本机实测：
 
+```text
+big1:  LOAD  0x000000 0x00000000 ... FileSiz 0x00648  MemSiz 0x00648  R E
+       LOAD  0x00fed0 0x0001fed0 ... FileSiz 0x00138  MemSiz 0x3d0a3c RW
+big2:  LOAD  0x000000 0x00000000 ... FileSiz 0x00648  MemSiz 0x00648  R E
+       LOAD  0x00fed0 0x0001fed0 ... FileSiz 0x3d0a38 MemSiz 0x3d0a3c RW
 ```
-big1:  LOAD  0x000000 0x00000000 ... FileSiz 0x00648  MemSiz 0x00648   R E
-       LOAD  0x00fed0 0x0001fed0 ... FileSiz 0x00138  MemSiz 0x3d0a3c  RW
 
-big2:  LOAD  0x000000 0x00000000 ... FileSiz 0x00648  MemSiz 0x00648   R E
-       LOAD  0x00fed0 0x0001fed0 ... FileSiz 0x3d0a38 MemSiz 0x3d0a3c  RW
+盯住 RW 那行的 FileSiz 和 MemSiz：
+
+```text
+       FileSiz     MemSiz      差值
+big1   0x00138     0x3d0a3c    0x3d0904 = 4000004
+big2   0x3d0a38    0x3d0a3c    0x000004 = 4
 ```
 
-**盯住 RW 那一行的两列：**
+`FileSiz` 是这个段在文件里占多少字节，`MemSiz` 是装进内存后要占多少
+字节。加载器的规则只有一条：**把文件里 FileSiz 那么多字节映射进内存，
+FileSiz 到 MemSiz 之间的部分全部填 0。** 内核 v4.9 源码里这个动作就是
+`fs/binfmt_elf.c` 里一个叫 `padzero` 的函数，名字直白。
 
-              FileSiz     MemSiz      差值
-    big1      0x00138     0x3d0a3c    0x3d0904 = 4,000,004
-    big2      0x3d0a38    0x3d0a3c    0x000004 = 4
+两个对照必须看出来：
 
-> **FileSiz**：这个 segment 在**文件**里占多少字节
-> **MemSiz** ：这个 segment 装进**内存**后要占多少字节
+1. **big1 和 big2 的 MemSiz 完全相等，都是 0x3d0a3c。** 把数组从 `.bss`
+   挪到 `.data`，内存一个字节没省，省的只有文件大小。
+2. big1 的差值 0x3d0904 正是第 4.2 节 `.bss` 的大小。`.bss` 的全部
+   "魔法"就是这个减法，没有任何特殊机制。
 
-**两个数关键的对照，一定要看出来：**
+00 篇第 7.3 节 `maps.c` 打印出 `g_bss = 0` 而你从没赋过值，清零的就是
+这一步。容易以为"没赋初值的全局变量里是随机残留"；实测它恒为 0；原因
+是 C 标准规定静态对象零初始化，而 ELF 用 `MemSiz - FileSiz` 把这个约定
+变成了加载器的一次清零。
 
-1. **big1 和 big2 的 MemSiz 完全一样，都是 0x3d0a3c。**
-   也就是说，把数组从 .bss 挪到 .data，**内存一个字节都没省**。
-   省的只有磁盘上的文件大小。
+### 4.4 这条在嵌入式上意味着什么
 
-2. big1 的 MemSiz 比 FileSiz 大了整整 4MB。
+```text
+static char buf[4 * 1024 * 1024];            -> 进 .bss，固件不变大
+static char buf[4 * 1024 * 1024] = {1};      -> 进 .data，固件立刻涨 4 MB
+```
 
-**加载器的规则就一条：**
+flash 空间紧张时这条能救命。但要同时记住 4.3 节的第 1 条对照：它省的是
+flash，不是 RAM，内存该占多少还是多少。把这两件事搞混，是嵌入式新手
+最常见的误判之一。
 
-    把文件里 FileSiz 那么多字节映射进内存，
-    然后从 FileSiz 到 MemSiz 之间的那一段，全部填 0。
+### 4.5 注错：初值全 0 会被放回去
 
-`.bss` 的全部魔法就在这个减法里。没有任何特殊机制，
-就是 program header 里两个数字不相等而已。
+把 `big2.c` 的 `= {1}` 改成 `= {0}`，重新编译：
 
-上一篇 `maps.c` 里打印出 `g_bss = 0` 而你从没赋过值，清零的就是这一步。
+本机实测，产物和 `big1` 一字节不差地大（都是 69236 字节）。编译器发现
+初值全是 0，效果等同于不写初值，把数组放回 `.bss`。如果改成 `{0}` 后
+文件还是 4 MB，说明你编的不是你改的那个文件。
 
-### 4.5 这条在嵌入式上意味着什么
+（核对大小时要同名重编：`.symtab` 里记着源文件名，换成长短不同的文件名
+再编，文件会差几个字节，那不是 `.bss` 的事。check.sh 里这条判据就是
+同名重编的。）
 
-    static char buf[4 * 1024 * 1024];              -> 进 .bss，固件不变大
-    static char buf[4 * 1024 * 1024] = {1};        -> 进 .data，固件立刻涨 4MB
+### 4.6 [判] 第 4 节
 
-flash 空间紧张时这条能救命。但要同时记住 4.4 的第 1 条：
-**它省的是 flash，不是 RAM。** RAM 该占多少还是多少。
-把这两件事搞混，是嵌入式新手最常见的误判之一。
+    [ ] big2 - big1 == 4000000，一个字节不差
+    [ ] readelf -s 里 arr 在 big1 属 .bss（NOBITS），在 big2 属
+        .data（PROGBITS）
+    [ ] big1 的 RW LOAD 段 MemSiz - FileSiz == 4000004
+    [ ] big1 和 big2 的 MemSiz 完全相等
+    [ ] big1 有 2 条 PT_LOAD，权限分别是 R E 和 RW
+    [ ] 初值改 {0} 后文件回到 69236
 
-### 4.6 判据
-
-    [ ] big2 - big1 的文件大小差 == 4,000,000，一个字节不差
-    [ ] readelf -S 里 arr 在 big1 属于 NOBITS 的 .bss，在 big2 属于 PROGBITS 的 .data
-        （查法：readelf -s bigN 找到 arr 那行，看它的第 7 列 section 下标，
-          再对照 readelf -S 里那个下标是哪个 section）
-    [ ] big1 的 RW LOAD 段 MemSiz - FileSiz == 0x3d0904 == 4,000,004
-    [ ] big1 和 big2 的 MemSiz 完全相等（内存占用没变）
-    [ ] 数得出 app 有几条 PT_LOAD、各自权限是什么（本机 big1 是 2 条：R E 和 RW）
-
-    注错见红：把 big2.c 的 = {1} 改成 = {0}。
-    编译器发现初值全 0，把它放回 .bss，文件又变回小的。
-    本机实测这一版是 69,236 字节，和 big1 一模一样，一个字节不差。
-    如果改成 = {0} 后文件还是 4MB，说明你编的不是你改的那个文件。
+**这一节搭好的积木**：`.bss` 是 NOBITS，文件里只记大小；加载器按
+`MemSiz - FileSiz` 补零，清零的是内核不是硬件；省文件不省内存。
+接下来的问题：把第 2、3、4 节的所有字段串起来，从 `execve` 到 `main`
+的完整过程是什么样。
 
 ---
 
-## 五、从 execve 到 main
+## 5 从 execve 到 main：加载的全过程
 
-前面都在看静态的文件。这一节看动态的过程：**从敲下 `./app` 到 main 执行，
-中间这段路谁在跑。**
+### 5.1 内核内部：谁认领、谁加载
 
-### 5.1 目标：找出入口地址 0x3dd 是谁
+教程 01 篇第 3.4 节讲过处理器链表：内核维护一张格式处理器列表，执行文件时
+先读文件开头一小段（`BINPRM_BUF_SIZE`，4.9 内核 128 字节、较新内核
+256 字节），再按列表顺序问每个处理器"归你管吗"，自定义规则处理器
+binfmt_misc 排在最前。这里把链表的出处补齐，对照 v4.9 内核源码：
 
-第二节的 `readelf -h` 给出 `Entry point 0x3dd`，而 main 在 0x4d8。入口不是
-main。0x3dd 是谁？上一篇的 app.map 里已经出现过答案：
-
-    .text  0x000003dc  0x34  Scrt1.o
-           0x000003dc            _start
-
-`_start` 在 0x3dc（入口 0x3dd 的末位 1 是 Thumb 指令集标记位，不是地址差异）。
-下面用 `strace` 把从敲下 `./app` 到 main 的路径录下来。
-
-### 5.2 动手：把整个过程录下来
-
-要看一个程序执行期间发生了什么系统调用，用 `strace`：
-
-    strace -e trace=execve,openat,mmap ./app_x86
-
-    -e trace=...  只看这三种调用，否则输出淹死人
-                  execve 执行程序、openat 打开文件、mmap 映射内存
-
-本机实测：
-
+```text
+fs/exec.c
+  prepare_binprm        把文件头 BINPRM_BUF_SIZE 字节读进 bprm->buf
+  search_binary_handler list_for_each_entry(fmt, &formats, lh)
+                        依次调用每个处理器的 load_binary，
+                        返回 -ENOEXEC 就问下一个
+fs/binfmt_misc.c        init_misc_binfmt 用 insert_binfmt 登记，插在表头
+fs/binfmt_script.c      register_binfmt 追加在表尾（处理 #! 脚本）
+fs/binfmt_elf.c         register_binfmt 追加在表尾（处理 ELF）
 ```
-execve("./app_x86", ["./app_x86"], 0x7ffc9230ec10 /* 24 vars */) = 0
-mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7649fff0c000
+
+`insert_binfmt` 插表头、`register_binfmt` 追加表尾，这就是 binfmt_misc
+排在最前的原因，和 教程 01 篇第 3.4 节一致。
+
+ELF 处理器认领之后，`load_elf_binary` 按固定顺序做事（v4.9 源码，
+`fs/binfmt_elf.c`）：
+
+```text
+1. 比魔数、查 e_type 是不是 EXEC/DYN、elf_check_arch 查 e_machine
+   （第 2.2 节引过这段；任一不过，返回 -ENOEXEC 让给下一个处理器）
+2. 按 e_phoff/e_phnum 读入 program header 表；e_phnum < 1 直接放弃
+   （第 3.5 节那个 126 就死在这里）
+3. 找 PT_INTERP：有，就取出解释器路径，open_exec 打开它。
+   打不开时错误原样返回：文件不存在是 -ENOENT，bash 翻成
+   "required file not found"，退出码 127（教程 01 篇第 3.5 节实测过）
+4. 逐条 PT_LOAD：按 VirtAddr/FileSiz/MemSiz/权限 mmap 进内存，
+   然后 padzero 把 FileSiz 到 MemSiz 之间清零（第 4.3 节）
+5. create_elf_tables：在新栈顶摆好 argc、argv、envp 和一批
+   辅助信息（auxv）
+6. 有解释器：先加载解释器（它自己也是个 ELF，同样按 LOAD 映射），
+   把入口改成解释器的入口；没有解释器（静态链接）：入口就是
+   本文件的 e_entry
+7. start_thread(regs, elf_entry, bprm->p)：设好新进程的 PC 和 SP。
+   ARM 版在这里处理 Thumb 标记位（第 2.4 节）
+```
+
+execve 返回成功的那一刻，当前进程原来的内存内容已经全部作废，CPU 回到
+用户态时站在入口地址上。**从 bash 的角度看是"启动了一个新程序"，从内核
+的角度看是"把当前进程改造成了另一个程序"，进程号都没变。**
+
+### 5.2 把全过程录下来：strace
+
+教程 01 篇第 3.2 节用 strace 看过一次失败的 `execve`。这次看一次成功的，
+而且要盯到 `main` 之前发生的一切：
+
+```bash
+strace -e trace=execve,openat,mmap ./app_x86
+```
+
+本机实测（行长截断到 110 列）：
+
+```text
+execve("./app_x86", ["./app_x86"], 0x7ffe0ad268c0 /* 22 vars */) = 0
+mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x748a65ee5000
 openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
-mmap(NULL, 49255, PROT_READ, MAP_PRIVATE, 3, 0) = 0x7649ffeff000
+mmap(NULL, 55735, PROT_READ, MAP_PRIVATE, 3, 0) = 0x748a65ed7000
 openat(AT_FDCWD, "/usr/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
-mmap(NULL, 2231696, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x7649ffc00000
-mmap(0x7649ffc28000, 1671168, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED, 3, 0x28000)
-mmap(0x7649ffdc0000, 319488, PROT_READ, MAP_PRIVATE|MAP_FIXED, 3, 0x1c0000)
-mmap(0x7649ffe0e000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0x20d000)
+mmap(NULL, 2231696, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x748a65c00000
+mmap(0x748a65c28000, 1671168, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = ...
+mmap(0x748a65dc0000, 319488, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1c0000) = ...
+mmap(0x748a65e0e000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED, 3, 0x20e000) = ...
+mmap(0x748a65e14000, 52624, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = ...
+mmap(NULL, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = ...
 +++ exited with 3 +++
 ```
 
-### 5.3 逐行读这段录像
+逐行读：
 
-**第 1 行**：`execve` 是唯一一个"用新程序替换当前进程"的系统调用。
-shell 就是靠它启动一切程序的。`= 0` 表示成功。
+- 第 1 行：`execve` 成功（`= 0`）。注意 `execve` 成功时不"返回"到原来的
+  程序，原来的程序已经不存在了；这个 0 出现在记录里，是因为新程序共用
+  同一段系统调用的返回路径。
+- 第 2 行起的事，你的程序一行代码都还没跑：`main` 的第一条指令要等到
+  这些 mmap 全部完成之后。**这些 openat 和 mmap 是动态链接器 ld.so 干
+  的。**内核在第 5.1 节第 6 步把控制权交给了 INTERP 指定的解释器，这里
+  就是它在工作。
+- 第 3、4 行：打开 `/etc/ld.so.cache`，这是系统里"哪个库在哪个路径"的
+  缓存，ld.so 靠它找库。
+- 第 5 行起：打开 `libc.so.6`，然后 mmap 它四次。libc 自己也是 ELF，
+  也有 LOAD 段；加载它用的规则和加载你的程序完全相同：只读的一段、
+  可执行的一段（`PROT_READ|PROT_EXEC`）、可写的一段
+  （`PROT_READ|PROT_WRITE`），和第 3.1 节 LOAD 行的 Flg 一一对应。
+- 最后一行：`exited with 3`，和 `return add(g_init,2) + g_bss` 的结果
+  一致，程序确实跑到了 `main` 并正常返回。
 
-**注意从第 3 行开始的事：进程打开了 `libc.so.6`，还 mmap 了它四次。**
-你的程序里根本没有 open 和 mmap 的代码，main 甚至还没开始跑。
-**这几行是动态链接器（`ld.so`）干的，不是你的程序干的。**
+### 5.3 _start 到 main：最后一公里
 
-它是从哪冒出来的？—— 第三节 `readelf -l` 里那条 INTERP：
+入口 `_start` 住在 `Scrt1.o` 里（00 篇第 6.4 节查过它的来历），它的
+源码在 glibc 的 `sysdeps/arm/start.S`。这段汇编做的事按注释写得很清楚：
 
-    INTERP   0x000198 ... [Requesting program interpreter: /lib/ld-linux-armhf.so.3]
+```text
+入口时栈上的布局：
+    0(sp)            argc
+    4(sp)            argv[0]
+    ...
+    (4*argc)(sp)     NULL
+    (4*(argc+1))(sp) envp[0]
+    ...
+```
 
-**内核看到 INTERP，就不会直接跳到你的 `_start`，而是先把这个"解释器"
-加载起来，把控制权交给它。** 由它去加载 libc、填好函数地址，再转交给你。
+也就是说，教程 01 篇第 1.2 节"bash 切词交给 argc/argv"的最后一段路是：
+内核的 `create_elf_tables` 把这些词摆在新栈顶，`_start` 从栈上把它们
+取下来（`pop {a2}` 取出 argc，栈指针接着就是 argv），再调用
+`__libc_start_main`。glibc 的 `csu/libc-start.c` 里，这个函数做完 C
+库自身的初始化后，通过 `__libc_start_call_main(main, argc, argv)` 调到
+你的 `main`；`main` 的返回值再交给 `exit` 变成进程的退出码。
 
-**再看那四次 mmap 的权限，和第三节的 LOAD 表对上：**
+一个呼应 教程 01 篇的细节：`libc-start.c` 里有一段注释说，glibc 2.34 改了
+`__libc_start_main` 的接口，为了区分新旧，专门造了 `GLIBC_2.34` 这个
+版本标签。教程 01 篇第 5.2 节板上那句 `version 'GLIBC_2.34' not found`，
+缺的正是这个标签。
 
-    PROT_READ                    只读段
-    PROT_READ|PROT_EXEC          代码段        <- 对应 Flg 的 R E
-    PROT_READ|PROT_WRITE         数据段        <- 对应 Flg 的 RW
+"程序从 main 开始"至此可以换成准确的版本：
 
-libc 也是 ELF，也有它自己的 LOAD segment，
-**加载它用的是和加载你的程序完全相同的规则。**
+```text
+execve
+  -> 内核：认格式、按 LOAD 映射、清 .bss、建栈
+  -> ld.so（仅动态链接）：加载 libc、填函数地址
+  -> _start（Scrt1.o）：从栈上取下 argc/argv
+  -> __libc_start_main（libc）：初始化 C 库
+  -> main（你写的）
+  -> exit：main 的返回值变成退出码
+```
 
-**最后一行 `exited with 3`**，和 3.3 的退出码对上，程序确实正常跑完了。
+整个过程的边界图：
 
-### 5.4 完整的路径
+![图 1　从 execve 到 main：内核与用户态的分工](fig/01-execve到main.svg)
 
-把前面所有证据串成一条链：
+实线是真实执行的通路；红线分开内核态和用户态；`main` 之前的一切都和你
+写的代码无关。
 
-从 `./app` 到 `main()` 的顺序：
+### 5.4 静态链接：整条链短了一截
 
-1. shell 调用 `execve("./app")`。
-2. **内核态**的 `load_elf_binary()`（加载器）检查：
-   - magic 是否为 `7f 45 4c 46`；
-   - `e_machine` 是否是本机架构，不符就返回 `ENOEXEC`；
-   - 每条 `PT_LOAD` 应映射到哪里、具有什么权限；
-   - `MemSiz` 超出 `FileSiz` 的部分需要清零（`.bss`）；
-   - `PT_INTERP` 指定了哪个解释器。
-3. 有 `PT_INTERP` 时，内核把控制权交给 **用户态**的 `ld.so`；静态链接程序则直接跳到 `e_entry`。
-4. `ld.so` 读取 `.dynamic`，映射 `libc.so.6` 的各个 `LOAD` segment，并完成重定位。
-5. `e_entry` 指向来自 `Scrt1.o` 的 `_start`；它整理 `argc / argv / envp`。
-6. `__libc_start_main` 运行 `.init_array` 中的构造函数，随后才调用 `main()`。
-7. `main` 返回 3，最终成为 `exit(3)`，所以 `strace` 显示 `exited with 3`。
-
-**"程序从 main 开始"是个方便的谎言。** main 之前至少还有内核的加载、
-动态链接器的整个工作，以及 libc 的初始化。
-
-### 5.5 判据
-
-    [ ] readelf -h 的 Entry point，等于 app.map 里 _start 的地址（Thumb 位除外）
-    [ ] strace 里能找到 execve 是第一条
-    [ ] strace 里 libc.so.6 被 mmap 了不止一次，且至少有一次带 PROT_EXEC
-    [ ] strace 最后一行的退出码，等于你 C 代码里 return 的值
-    [ ] 能指出是哪条 program header 导致 ld.so 被加载进来
-
-    注错见红：静态链接一次，PT_INTERP 就没了。
-
-        gcc -static main.c add.c -o app_static
-        readelf -l app_static | grep INTERP        # 应该什么都没有
-        strace -e trace=openat ./app_static        # 不再打开 libc.so.6
-        ls -l app_x86 app_static
-
-    本机实测三个现象同时出现：
-
-        INTERP 条数            0
-        strace 里打开 libc     0 次
-        文件大小               15,888 -> 816,896（大了 51 倍）
-        退出码                 仍然是 3，程序行为不变
-
-    大 51 倍是因为 libc 被整个塞进了你的程序里。
-    三个现象要一起出现；如果 INTERP 没了但 strace 还在开 libc，
-    说明你 strace 的是旧文件。
-
----
-
-## 六、顺带一提：和裸机的对照
-
-如果你在 ysyx 或龙芯 SoC 那边做过裸机程序，这里可以对一下。
-**没做过也不影响，跳过这节即可，本篇不依赖它。**
-
-裸机那边的流程是：
-
-    编译链接出 ELF -> objcopy -O binary 剥成 .bin -> 烧进 flash -> pc 跳到固定地址
-
-`objcopy -O binary` 那一步扔掉的，正是本篇讲的全部东西：
-ELF 头、program header、section 表，只留下 LOAD segment 里的原始字节。
-
-可以直接验证扔掉之后会怎样：
-
-    objcopy -O binary app_x86 app.bin
-    chmod +x app.bin
-    ./app.bin
+```bash
+gcc -static main.c add.c -o app_static
+readelf -lW app_static | grep -c INTERP
+strace -e trace=openat ./app_static 2>&1 | grep -c 'libc.so.6'
+ls -l app_x86 app_static
+./app_static; echo "exit=$?"
+```
 
 本机实测：
 
-    cannot execute binary file: Exec format error
+```text
+0            （INTERP 一条都没有）
+0            （运行时一次都没打开 libc.so.6）
+-rwxrwxrwx 1 glorinz glorinz  15888 ... app_x86
+-rwxrwxrwx 1 glorinz glorinz 816920 ... app_static
+exit=3
+```
 
-**裸 bin 在 Linux 下一定跑不起来**，因为内核第一步就查不到 magic。
-反过来，裸机能用 .bin，是因为那边不需要这些信息：
+三个现象同时出现：没有 INTERP，内核在第 5.1 节第 6 步直接把入口设成
+本文件的 `e_entry`；ld.so 不参与，libc 的代码在链接时已经拷进了文件
+（所以大了五十多倍）；运行时不再找任何库，版本标签问题整个不存在。
+这就是 教程 01 篇第 5.3 节"现阶段上板一律 `-static`"的全部原理。
 
-    裸机                                Linux
-    ---------------------------------   ------------------------------------
-    只有一个程序，独占内存               多进程，各自要独立地址空间
-    加载地址在链接脚本里写死             有虚拟内存和 ASLR，每次地址都可能不同
-    没有库，所有代码都在这一个 bin 里     要在运行时找到并加载 libc
-    没有权限概念，全部可读可写可执行      要按 segment 设 R/W/X
+静态版还有一个附带变化：`readelf -h` 的 Type 从 `DYN` 变回 `EXEC`，
+LOAD 段的 VirtAddr 是写死的 0x400000 起。位置无关对静态程序没有意义，
+链接器直接给了固定地址。
 
-**这四条差异，正是 ELF 里 program header 存在的四个理由。**
+### 5.5 [判] 第 5 节
+
+    [ ] strace 里第一行是 execve
+    [ ] main 还没跑，libc.so.6 已被打开并被 mmap 至少一次带
+        PROT_EXEC（动态链接器干的）
+    [ ] strace 最后一行的退出码等于 main 里 return 的值
+    [ ] 静态链接后 INTERP 为 0 条、strace 里不再打开 libc.so.6、
+        文件明显变大、退出码不变
+    [ ] 能指出是 PT_INTERP 这一条导致 ld.so 被加载
+
+    注错见红：把 e_machine 改回本机架构（教程 01 篇第 3.5 节的手法），
+    动态版必须报 127（找不到解释器），静态版必须报 139（真的开始
+    执行了错指令）。两个数字分别对应第 5.1 节的第 3 步和第 7 步之后。
+
+**这一节搭好的积木**：从 execve 到 main 的每一步都能指到内核源码或
+strace 记录；动态链接多出的那一段是 ld.so 干的；静态链接把它整段省掉。
 
 ---
 
-## 七、原文清单
+## 6 速查清单
 
-ELF 头里与"能不能跑"有关的字段，以及两张表里最常看的项。原书第 1 章没有
-逐字段罗列 ELF；这份清单按 `readelf` 与内核 `load_elf_binary` 的实际字段整理，
-每条都对应本篇的一个实验。
+每条标依据；本机实测均为 2026-10-20。
 
-| 字段 / 项 | 偏移或位置 | 看什么 | 本篇 |
+**ELF 文件头字段（32 位，共 52 字节；依据：本篇第 2.1 节实测字节 +
+`readelf -h`）**：
+
+| 偏移 | 字段 | 看什么 | 本篇 |
 |---|---|---|---|
-| `e_ident[0..3]` | 0x00 | 魔数 `7f 45 4c 46`，不对就不是 ELF | 2.3 |
-| `e_ident[4]` | 0x04 | 01 = 32 位，02 = 64 位 | 2.3 |
-| `e_ident[5]` | 0x05 | 01 = 小端，02 = 大端 | 2.3 |
-| `e_type` | 0x10 | 02 = 可执行，03 = 共享库 / PIE，01 = 可重定位 | 2.3 |
-| `e_machine` | 0x12 | 28 = ARM，3e = x86-64 | 2.3 |
-| `e_entry` | 0x18 | 第一条指令地址（不是 main） | 五 |
-| `e_phoff` / `e_phnum` | 0x1c / 0x2c | program header 表在哪、几项 | 三 |
-| `PT_LOAD` | program header | 映射哪一段、权限 R/W/X、`FileSiz` / `MemSiz` | 三、四 |
-| `PT_INTERP` | program header | 动态链接器路径（`ld.so`） | 五 |
-| section 表 | `e_shoff` 指向 | 链接与调试用；加载时内核不看 | 三 |
+| 0x00 | `e_ident[0..3]` | 魔数 `7f 45 4c 46`，不对就不是 ELF | 2.1 |
+| 0x04 | `e_ident[4]` | 01 = 32 位，02 = 64 位 | 2.1 |
+| 0x05 | `e_ident[5]` | 01 = 小端，02 = 大端 | 2.1 |
+| 0x10 | `e_type` | 1 = 可重定位（.o），2 = EXEC，3 = DYN（库/PIE） | 1、2.1 |
+| 0x12 | `e_machine` | 40 = ARM，62 = x86-64，243 = RISC-V，183 = AArch64 | 2.3 |
+| 0x18 | `e_entry` | 入口地址，不是 main；ARM 上末位是 Thumb 标记 | 2.4、5.3 |
+| 0x1c | `e_phoff` | program header 表在文件里的位置 | 3.1 |
+| 0x20 | `e_shoff` | section 表在文件里的位置 | 3.1 |
+| 0x24 | `e_flags` | ARM 上是 EABI 版本和浮点约定 | 2.1 |
+| 0x2c | `e_phnum` | program header 条数；为 0 内核直接拒绝 | 3.5 |
 
-## 八、带走
+（64 位文件头 64 字节，字段相同、地址类字段变 8 字节，`e_phnum` 在偏移
+56 处。依据：第 3.5 节实测。）
 
-读完这一篇，开头三个问题应该能直接回答。答案就是下面七条：
+**program header 常见类型（依据：第 3.1 节 `readelf -lW` 实测）**：
 
-1. **ELF 是文件格式，不是"可执行程序"的同义词。** `.o`、`.so`、可执行文件
-   都是 ELF；能不能跑，看 ELF 头里写的类型和目标架构。
-2. **一份内容两张目录：section 按用途切给链接器，segment 按权限切给内核。**
-   两者不是一一对应，谁也不需要对方那张。
-3. **加载时内核只认 program header 里的 `LOAD` 项**，它写明把文件的哪一段摆到
-   哪个虚拟地址、给什么权限；section 表这时候一眼都不会看。
-4. **`LOAD` 行里 `FileSiz` 是文件里占几字节，`MemSiz` 是内存里要几字节。**
-   多出来的那截由内核补零，`.bss` 就藏在这个差里（差值还含对齐，不等于
-   `.bss` 的精确大小）。
-5. **`.bss` 只记大小，不在文件里存那一堆零。** 大零数组吃内存，文件却几乎不涨；
-   但"文件省了"不等于"运行时免费"。
-6. **`main` 不是第一条指令。** 动态链接程序的顺序是：内核映射 → `ld.so` 找齐库
-   → `_start` → libc 初始化 → `main`。
-7. **`Exec format error` 的意思是"内核不认这个文件"，不是"文件坏了"。**
-   先 `file` 或 `readelf -h` 看架构和类型，别急着重编。
+| Type | 干什么 |
+|---|---|
+| `LOAD` | 装进内存：Offset/FileSiz 从文件读，VirtAddr/MemSiz/Flg 定位置与权限 |
+| `INTERP` | 动态链接器的路径 |
+| `DYNAMIC` | 动态链接信息的位置，给 ld.so |
+| `NOTE` | 附注（构建 ID 等） |
+| `GNU_STACK` | 栈权限声明（RW = 不可执行） |
+| `GNU_RELRO` | 重定位完成后改只读的区域 |
+| `PHDR` | program header 表自身的位置 |
+
+**section 常见类型（依据：00 篇第 6.2 节、本篇第 4.2 节实测）**：
+
+| Type | 含义 |
+|---|---|
+| `PROGBITS` | 文件里真存这些字节 |
+| `NOBITS` | 文件里不存，只记大小（.bss） |
+| `SYMTAB` / `STRTAB` | 符号表 / 字符串表，工具用，运行时不进内存 |
+| `REL` / `RELA` | 重定位便条 |
+
+**工具一句一个（本机实测）**：
+
+| 命令 | 干什么 |
+|---|---|
+| `readelf -h` | 文件头 |
+| `readelf -lW` | program header 表和 section-to-segment 对照 |
+| `readelf -SW` | section 表 |
+| `readelf -p .interp` | 看动态链接器路径那串字符 |
+| `hexdump -C 文件` | 按字节看文件 |
+| `strip 文件` | 删符号表等链接期信息 |
+| `strip --strip-section-headers` | 连 section 表一起删 |
+| `objcopy -O binary` | 剥成裸 bin（只剩 LOAD 段的字节） |
+
+**退出码速查（依据：教程 01 篇第 3.5、5.2 节与本篇第 3.5 节实测）**：
+
+| 退出码 | 含义 | 死在哪一步 |
+|---|---|---|
+| 126 | Exec format error | 内核处理器链表没人认领（魔数、架构、e_phnum） |
+| 127 | required file not found | 过了架构检查，找不到 INTERP 写的动态链接器 |
+| 139 | Segmentation fault | 真的开始执行了，访问了没权限的内存（128 + 11） |
+| 1 | 动态链接器自己退出 | 库版本标签对不上等原因（教程 01 篇第 5.2 节） |
+
+---
+
+## 回看
+
+整篇从"一个文件凭什么能变成进程"出发：
+
+| 问题 | 答案 | 证据在哪 |
+|---|---|---|
+| 文件头里写了什么 | 52 个字节逐个对应 readelf -h 的每一行 | 2.1 |
+| 内核凭什么拒绝 | 只查魔数、e_type、e_machine 三处 | 2.2，内核源码 |
+| 为什么有两张表 | 链接器要切得细，加载器要切得粗 | 1、3.1、3.2 |
+| section 和 segment 谁离不开谁 | section 删光照样跑，segment 数改 0 直接死 | 3.3～3.5 |
+| FileSiz 和 MemSiz 的差是什么 | 要清零的 .bss | 4.3 |
+| 入口是谁 | `_start`（Scrt1.o），末位是 Thumb 标记 | 2.4、5.3 |
+| main 之前谁在跑 | 内核加载器，然后 ld.so（仅动态链接） | 5.1、5.2 |
+| 静态链接少了什么 | ld.so 整段；INTERP 消失，libc 不打开 | 5.4 |
+
+文件布局与两种视角的总图：
+
+![图 2　ELF 文件布局：一份内容，两种切法](fig/01-elf两种视角.svg)
+
+---
+
+## 带走
+
+开头四个问题的答案：
+
+1. **文件里存的是"代码加数据"加"两份说明书"。** 文件头说明"我是谁、
+   给谁跑、两张表在哪"；program header 表说明"哪段装进内存、装到哪、
+   什么权限"；section 表说明"我由哪些块组成"，给工具看。内核凭前两者
+   就能把它变成进程。
+2. **两张表服务两个读者，谁也替代不了谁。** section 按用途切给链接器，
+   运行时删掉整张表程序照跑；segment 按权限切给加载器，条数改 0 就
+   无法执行。
+3. **`.bss` 藏在 LOAD 段的减法里。** `MemSiz - FileSiz` 那一段由内核
+   清零；大零数组不吃文件大小，但内存照占。
+4. **从 execve 到 main 是一条六环的链**：内核认格式、映射、清零、建栈，
+   ld.so 加载库（仅动态链接），`_start` 取下 argc/argv，
+   `__libc_start_main` 初始化 C 库，然后才是 `main`。`main` 的返回值
+   经 `exit` 变成退出码。
 
 ### 看到什么，就先想到什么
 
 | 看到的东西 | 第一反应 |
 |---|---|
-| `readelf -h` / `-S` / `-l` | 分别看 ELF 头、section 表、program header 表（`LOAD` 在这张里） |
-| `Exec format error` | 内核读头部没认出来；`file` 看架构对不对、类型是不是可执行 |
-| 文件明明在，执行却说"找不到" | 找不到的多半不是它，是 `readelf -l` 里那个解释器（`ld.so`）路径在板子上不存在 |
-| 大数组让内存涨了，文件却没大多少 | 它进了 `.bss`；再往下要分清文件大小、虚拟地址空间、实际驻留内存三件事 |
+| `Exec format error` | 内核没认出这个文件；`file` 和 `readelf -h` 看架构和类型，别急着重编 |
+| 文件明明在却报"找不到"（127） | 找不到的多半不是它，是 `readelf -lW` 里 INTERP 写的那个路径 |
+| `readelf -h` / `-SW` / `-lW` | 分别看文件头、section 表、program header 表 |
+| 文件挺小，跑起来内存很大 | 有大的 `.bss`；查 LOAD 段的 MemSiz 减 FileSiz |
+| strip 之后 gdb 看不到函数名 | 正常，gdb 读的符号表被删了；程序本身不受影响 |
+| 入口地址是奇数（ARM） | 末位是 Thumb 标记，真实地址清掉末位 |
 
-## 九、接下来
+---
 
-- [05 静态库、动态库与符号](05_静态库动态库与符号.md)：`ld.so` 具体怎么填地址、
-  PLT/GOT 是什么
-- [07 系统调用与用户态/内核态](07_系统调用与用户内核态.md)：`execve` 这类系统调用
-  到底怎么进内核
-- [09 虚拟内存与 mmap](09_虚拟内存与mmap.md)：`mmap` 为什么是"映射"不是"拷贝"
-- 教程位置：01 篇 §3～§4 用 `e_machine` 讲拒绝、用 `.interp` 讲动态链接；
-  第 2 阶段的 `.ko` 也是 ELF（`ET_REL`），`insmod` 时内核自己做重定位
+## 接下来
+
+- [00 从源码到运行](00_从源码到运行.md)：section、重定位便条、map 文件
+  是怎么产生这张布局说明书的。
+- [05 静态库、动态库与符号](05_静态库动态库与符号.md)：ld.so 加载 libc
+  之后"填函数地址"的具体做法，PLT/GOT 是什么。
+- [09 虚拟内存与 mmap](09_虚拟内存与mmap.md)：LOAD 段"映射"为什么是
+  映射而不是拷贝，页错误如何把内容真正读进来。
+- 教程里的位置：教程 01 篇第 3 节用本篇的 `e_machine` 和 INTERP 解释了
+  126 和 127；02 篇[02 GCC 编译器的使用](../tutorials/01_应用编程/02_GCC编译器的使用.md)第 6 节接着第 5.4 节的静态/动态
+  之分往下讲；第 2 阶段的内核模块（.ko）也是 ELF，`e_type` 是 1，
+  加载时由内核自己做重定位。

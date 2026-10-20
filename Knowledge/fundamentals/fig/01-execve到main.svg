@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    .lb { font-size: 11px; fill: #333; }
+    rect.box { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.4; }
+    line.red { stroke: #c0392b; stroke-width: 2; stroke-dasharray: 12,6; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="640" fill="#fff"/>
+  <text class="t" x="24" y="32">从 execve 到 main：内核与用户态的分工</text>
+  <text class="s" x="24" y="54">实线=真实执行的通路；红色虚线=内核态与用户态的分界，全程穿越两次。</text>
+
+  <text class="h" x="30" y="88">内核态（load_elf_binary）</text>
+  <text class="h" x="600" y="88">用户态</text>
+  <line class="red" x1="470" y1="96" x2="470" y2="600"/>
+
+  <!-- 内核列 -->
+  <rect class="box" x="30" y="104" width="380" height="84"/>
+  <text class="h" x="44" y="128">① 认格式</text>
+  <text class="s" x="44" y="148">魔数 7f 45 4c 46、e_type、e_machine,</text>
+  <text class="s" x="44" y="166">三处不对就拒绝（退出码 126，第 2.2 节）</text>
+
+  <path class="w" d="M220,188 L220,216" marker-end="url(#ar)"/>
+
+  <rect class="box" x="30" y="218" width="380" height="84"/>
+  <text class="h" x="44" y="242">② 按 LOAD 段映射</text>
+  <text class="s" x="44" y="262">只读段 / 可执行段 / 可写段，</text>
+  <text class="s" x="44" y="280">Flg 一位一位照办（第 3.1 节；映射细节 09 篇）</text>
+
+  <path class="w" d="M220,302 L220,330" marker-end="url(#ar)"/>
+
+  <rect class="box" x="30" y="332" width="380" height="84"/>
+  <text class="h" x="44" y="356">③ 清零与建栈</text>
+  <text class="s" x="44" y="376">MemSiz &gt; FileSiz 的部分清零（.bss，第 4.3 节）；</text>
+  <text class="s" x="44" y="394">create_elf_tables 把 argc/argv/envp 摆上新栈</text>
+
+  <path class="w" d="M220,416 L220,444" marker-end="url(#ar)"/>
+
+  <rect class="box" x="30" y="446" width="380" height="84"/>
+  <text class="h" x="44" y="470">④ 入口交接</text>
+  <text class="s" x="44" y="490">动态链接：入口交给 INTERP 写的 ld.so；</text>
+  <text class="s" x="44" y="508">静态链接没有 INTERP，入口直接是 _start（第 5.4 节）</text>
+
+  <rect class="box" x="30" y="556" width="380" height="62"/>
+  <text class="h" x="44" y="580">进程终结</text>
+  <text class="s" x="44" y="600">退出码交给父进程的 waitpid（12 篇第 3 节）</text>
+
+  <!-- 用户列 -->
+  <rect class="box" x="530" y="104" width="440" height="70"/>
+  <text class="h" x="544" y="128">shell：认出 ./hello</text>
+  <text class="s" x="544" y="148">fork 出子进程，子进程请内核加载新程序</text>
+
+  <rect class="box" x="530" y="224" width="440" height="96"/>
+  <text class="h" x="544" y="248">ld.so（仅动态链接才有这一步）</text>
+  <text class="s" x="544" y="268">读 NEEDED、打开 ld.so.cache、加载 libc、</text>
+  <text class="s" x="544" y="286">填好函数地址（第 5.2 节 strace 逐行对过）</text>
+
+  <path class="w" d="M750,320 L750,348" marker-end="url(#ar)"/>
+
+  <rect class="box" x="530" y="350" width="440" height="96"/>
+  <text class="h" x="544" y="374">_start（Scrt1.o）与 __libc_start_main</text>
+  <text class="s" x="544" y="394">_start 从新栈顶取下 argc，栈指针接着就是 argv；</text>
+  <text class="s" x="544" y="412">__libc_start_main 做完 C 库初始化才调 main</text>
+  <text class="s" x="544" y="430">（GLIBC_2.34 版本标签的出处，05 篇第 5 节）</text>
+
+  <path class="w" d="M750,446 L750,474" marker-end="url(#ar)"/>
+
+  <rect class="box" x="530" y="476" width="440" height="70"/>
+  <text class="h" x="544" y="500">main（你写的）</text>
+  <text class="s" x="544" y="520">从这里开始才是你的代码；返回值交给 exit</text>
+
+  <!-- 三次跨界 -->
+  <path class="w" d="M530,139 L410,139" marker-end="url(#ar)"/>
+  <text class="lb" x="436" y="130">execve 系统调用</text>
+
+  <path class="w" d="M410,488 L440,488 L440,272 L530,272" marker-end="url(#ar)"/>
+  <text class="lb" x="446" y="262">交棒：入口是 ld.so</text>
+
+  <path class="w" d="M530,511 L440,511 L440,587 L410,587" marker-end="url(#ar)"/>
+  <text class="lb" x="446" y="545">退出码</text>
+
+  <text class="s" x="24" y="632">穿越两次：execve 进内核（左上），交棒回用户态（④），最后退出码再回内核交给父进程。main 之前的一切都与你写的代码无关。</text>
+</svg>

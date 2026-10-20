@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="620" viewBox="0 0 1000 620">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    .cb { font-size: 10px; fill: #333; }
+    rect.box { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    rect.cell { fill: #fff; stroke: #333; stroke-width: 1; }
+    rect.load { fill: #e8e8e8; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.4; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="620" fill="#fff"/>
+  <text class="t" x="24" y="32">ELF 文件布局：一份内容，两种切法</text>
+  <text class="s" x="24" y="54">同一排字节，链接器按 section 表切得细（工具用），加载器按 program header 表切得粗（进内存）。</text>
+
+  <!-- 字节条 -->
+  <text class="h" x="30" y="88">文件里的字节（hello_arm 为例，偏移从 0 到文件尾）</text>
+  <rect class="cell" x="30"  y="100" width="120" height="40"/>
+  <rect class="cell" x="150" y="100" width="140" height="40"/>
+  <rect class="cell" x="290" y="100" width="150" height="40"/>
+  <rect class="cell" x="440" y="100" width="90"  height="40"/>
+  <rect class="cell" x="530" y="100" width="90"  height="40"/>
+  <rect class="cell" x="620" y="100" width="120" height="40"/>
+  <rect class="cell" x="740" y="100" width="120" height="40"/>
+  <rect class="cell" x="860" y="100" width="110" height="40"/>
+  <text class="cb code" x="90"  y="124" text-anchor="middle">ELF 头</text>
+  <text class="cb code" x="220" y="124" text-anchor="middle">program header 表</text>
+  <text class="cb code" x="365" y="124" text-anchor="middle">.text + .rodata</text>
+  <text class="cb code" x="485" y="124" text-anchor="middle">.data</text>
+  <text class="cb code" x="575" y="124" text-anchor="middle">.bss(不占)</text>
+  <text class="cb code" x="680" y="124" text-anchor="middle">.symtab/.strtab</text>
+  <text class="cb code" x="800" y="124" text-anchor="middle">.comment 等</text>
+  <text class="cb code" x="915" y="124" text-anchor="middle">section 表</text>
+
+  <path class="w" d="M240,140 L160,196" marker-end="url(#ar)"/>
+  <path class="w" d="M700,140 L800,196" marker-end="url(#ar)"/>
+  <text class="s" x="120" y="176">链接器读这张表</text>
+  <text class="s" x="770" y="176">加载器读这张表</text>
+
+  <!-- 链接器视角 -->
+  <rect class="box" x="30" y="198" width="430" height="300"/>
+  <text class="h" x="46" y="222">链接器的切法（section 表，切得细）</text>
+  <rect class="cell" x="46"  y="238" width="86" height="34"/>
+  <rect class="cell" x="136" y="238" width="86" height="34"/>
+  <rect class="cell" x="226" y="238" width="86" height="34"/>
+  <rect class="cell" x="316" y="238" width="128" height="34"/>
+  <text class="cb code" x="89"  y="259" text-anchor="middle">.text</text>
+  <text class="cb code" x="179" y="259" text-anchor="middle">.rodata</text>
+  <text class="cb code" x="269" y="259" text-anchor="middle">.data</text>
+  <text class="cb code" x="380" y="259" text-anchor="middle">.symtab/.strtab</text>
+  <text class="s" x="46" y="300">每类内容一个箱子，边界精确到字节；</text>
+  <text class="s" x="46" y="318">nm、objdump、readelf -S 按它定位；</text>
+  <text class="s" x="46" y="340">重定位便条（.rela.text）也挂在这层。</text>
+  <text class="s" x="46" y="372">运行时不进内存：strip 删掉它，</text>
+  <text class="s" x="46" y="390">程序照常跑（第 3.3 节实测）；</text>
+  <text class="s" x="46" y="412">调试器找不到函数名，是唯一的损失。</text>
+
+  <!-- 加载器视角 -->
+  <rect class="box" x="500" y="198" width="470" height="300"/>
+  <text class="h" x="516" y="222">加载器的切法（program header 表，切得粗）</text>
+  <rect class="load" x="516" y="238" width="220" height="34"/>
+  <rect class="load" x="740" y="238" width="212" height="34"/>
+  <rect class="cell" x="516" y="286" width="120" height="34"/>
+  <text class="cb code" x="626" y="259" text-anchor="middle">LOAD  R X（第 3.1 节）</text>
+  <text class="cb code" x="846" y="259" text-anchor="middle">LOAD  RW</text>
+  <text class="cb code" x="576" y="307" text-anchor="middle">INTERP: ld-linux 路径</text>
+  <text class="s" x="516" y="348">每段一份权限，整段映射（09 篇第 7 节）；</text>
+  <text class="s" x="516" y="366">FileSiz 从文件抄，多出的 MemSiz 清零（.bss）；</text>
+  <text class="s" x="516" y="388">Entry 指向 _start，末位是 Thumb 标记（第 2.4 节）。</text>
+  <text class="s" x="516" y="420">这张表删不得：p_count 改 0，</text>
+  <text class="s" x="516" y="438">内核直接拒绝（第 3.5 节实测，退出码 126）。</text>
+
+  <!-- 底部对照 -->
+  <rect class="box" x="30" y="520" width="940" height="70"/>
+  <text class="s" x="50" y="544">两份表各答各的问题：section 表答"这个符号/这段数据在文件哪里"（链接时用）；program header 表答"这些字节进内存后放哪、什么权限"（运行时用）。</text>
+  <text class="s" x="50" y="566">谁也离不开谁的说法是错的：section 表可以整个删掉，program header 表一个都不能少。</text>
+</svg>
