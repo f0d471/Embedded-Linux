@@ -183,7 +183,7 @@ collect2 ... -o hello
 
 ```bash
 mkdir /tmp/st && cd /tmp/st
-cp /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello/hello.c .
+cp /mnt/e/Workspace/Embeded/Embedded-linux/Knowledge/labs/01_hello/hello.c .
 gcc -save-temps -o hello hello.c
 ls -l
 ```
@@ -1627,7 +1627,7 @@ Type 从 DYN 回到 EXEC 的原因：`hello` 这类动态程序标 DYN 是因为
 
 ```bash
 mkdir /tmp/stbad && cd /tmp/stbad
-arm-linux-gnueabihf-gcc -O2 -Wall -Wextra /mnt/e/Workspace/Embedded-linux/Knowledge/labs/01_hello/hello.c -o -static
+arm-linux-gnueabihf-gcc -O2 -Wall -Wextra /mnt/e/Workspace/Embeded/Embedded-linux/Knowledge/labs/01_hello/hello.c -o -static
 ls -l
 readelf -h ./-static | grep Type:
 cd - && rm -rf /tmp/stbad

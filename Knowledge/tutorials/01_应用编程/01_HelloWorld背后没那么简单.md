@@ -1343,7 +1343,7 @@ COM3、COM4 是电脑自带的蓝牙串口，和板子无关。认准名字里�
 脚本负责登录、发命令、把输出取回来，并把板上最后一条命令的退出码作为自己的退出码。
 
 ~~~powershell
-Set-Location E:\Workspace\Embedded-linux
+Set-Location E:\Workspace\Embeded\Embedded-linux
 .\Tools\serial-board.ps1 'uname -a; cat /proc/cmdline; ls /dev/ttymxc*'
 ~~~
 
@@ -1529,7 +1529,7 @@ ls -l hello_x86 hello_arm_dynamic hello_arm_static
 **第二步，在 PowerShell 里传三个文件。**
 
 ~~~powershell
-Set-Location E:\Workspace\Embedded-linux
+Set-Location E:\Workspace\Embeded\Embedded-linux
 .\Tools\serial-board.ps1 'rm -rf /tmp/ch01-board-repro'
 foreach ($n in 'hello_x86', 'hello_arm_dynamic', 'hello_arm_static') {
     .\Tools\serial-board.ps1 -Upload ".\Knowledge\labs\01_hello\$n" -Destination "/tmp/ch01-board-repro/$n"

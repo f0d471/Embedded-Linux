@@ -161,7 +161,7 @@ lrwxrwxrwx ... /sys/class/graphics/fb0/device -> ../../../21c8000.lcdif
 mkdir -p ~/fblab && cd ~/fblab
 mknod fb_fake c 29 0            # c=字符设备 29=主设备号 0=次设备号
 echo hello > data.txt
-gcc -Wall -o fbopen /mnt/e/Workspace/Embedded-linux/Knowledge/labs/05_framebuffer/probe/fbopen.c
+gcc -Wall -o fbopen /mnt/e/Workspace/Embeded/Embedded-linux/Knowledge/labs/05_framebuffer/probe/fbopen.c
 ./fbopen fb_fake data.txt /dev/null
 ```
 
@@ -282,7 +282,7 @@ int main(int argc, char **argv)
 先在 WSL 里把报错分支跑出来（电脑上 open 成功、ioctl 撞到 1.2 节的第二道门）：
 
 ```bash
-cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/05_framebuffer
+cd /mnt/e/Workspace/Embeded/Embedded-linux/Knowledge/labs/05_framebuffer
 gcc -Wall -Wextra -O2 fbinfo.c -o /tmp/fbinfo
 /tmp/fbinfo /dev/null; echo exit=$?
 ```
@@ -1165,7 +1165,7 @@ f800: 100  ffff: 921500        合计 921600 = 1280 × 720
 判据跑法（WSL 无 fb0，用 mem 后端）：
 
 ```bash
-cd /mnt/e/Workspace/Embedded-linux/Project
+cd /mnt/e/Workspace/Embeded/Embedded-linux/Project
 export DISP_DEV=mem FONT_DEV=builtin INPUT_BACKEND=replay INPUT_REPLAY=/dev/null
 ./build/x86/product_tool        # 日志里看 display init OK / exit OK
 bash check.sh                   # display 相关的判据在 [1]~[10] 组

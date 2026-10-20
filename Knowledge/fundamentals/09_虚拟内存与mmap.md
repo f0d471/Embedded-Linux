@@ -961,7 +961,7 @@ dd if=sp.bin bs=1 skip=500000 count=4 status=none | od -An -tu1   # 空洞里是
 同一条 `dd`，在仓库所在的 Windows 盘上跑（WSL 把它挂成 v9fs）：
 
 ```bash
-cd /mnt/e/Workspace/Embedded-linux/Knowledge/labs/00_basics/03_vm_and_mmap
+cd /mnt/e/Workspace/Embeded/Embedded-linux/Knowledge/labs/00_basics/03_vm_and_mmap
 dd if=/dev/zero of=.sp.bin bs=1 count=4 seek=1048576 status=none
 stat -c %b .sp.bin
 rm .sp.bin
