@@ -1,25 +1,13 @@
-/* 绕过 libc，自己发一条系统调用 */
-#include <unistd.h>
-
-/* x86-64: 调用号放 rax，参数放 rdi/rsi/rdx，syscall 指令进内核 */
-static long raw_write(int fd, const void *buf, unsigned long n)
-{
-	long ret;
-	__asm__ volatile (
-		"syscall"
-		: "=a"(ret)                          /* 返回值从 rax 出来 */
-		: "a"(1),      /* rax = 1 = __NR_write */
-		  "D"(fd),     /* rdi = 第 1 个参数 */
-		  "S"(buf),    /* rsi = 第 2 个参数 */
-		  "d"(n)       /* rdx = 第 3 个参数 */
-		: "rcx", "r11", "memory"             /* syscall 会破坏这两个寄存器 */
-	);
-	return ret;
-}
+/* 不经过 C 库的 write：没有 include 任何 C 库头文件，照样把一行字送到 fd 1。
+ * 电脑：gcc -O2 rawsys.c -o rawsys
+ * ARM： arm-linux-gnueabihf-gcc -O2 -static rawsys.c -o rawsys_arm
+ */
+#include "raw.h"
 
 int main(void)
 {
-	const char msg[] = "hello from raw syscall\n";
-	raw_write(1, msg, sizeof msg - 1);
+	static const char msg[] = "hello from raw syscall\n";
+
+	raw_syscall3(NR_write, 1, (long)msg, sizeof msg - 1);
 	return 0;
 }
