@@ -97,9 +97,10 @@ Engineering/Todo/学习与项目路线.md。
         判据基线：bash Project/check.sh → TOTAL 124 PASS / 0 FAIL / 0 SKIP
         下一步：P1 应用编程 07～11 教程收尾；P2 驱动开发；P3 起视频链路
 
-labs 判据基线（WSL，2026-10-16 复核）：Knowledge/labs/00_basics 十一套 +
-06_text 合计 323 PASS / 0 FAIL / 5 SKIP（04 篇 1 条：本机缺 x86 32 位头；
-08 篇 4 条：要 root）。
+labs 判据基线（WSL，2026-10-21 复核）：Knowledge/labs/00_basics 十二套
+合计 692 PASS / 0 FAIL / 8 SKIP（09 篇 1 条要上板；07 篇 3 条：伪终端或
+root；10 篇 4 条要 root）；教程侧 02 篇 70、03 篇 90、04 篇 58、
+05 篇 35+1 SKIP、06 篇 60。
 
 ## 六、文档规则
 
