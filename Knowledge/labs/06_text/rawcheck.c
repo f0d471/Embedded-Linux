@@ -52,6 +52,8 @@ int main(int argc, char **argv)
 	unsigned width, height, stride, bpp, bytes;
 	unsigned ro, rl, go, gl, bo, bl;
 	size_t expected, pixels, got, nonblack = 0, unique = 0;
+	uint32_t brightest = 0;
+	unsigned brightest_sum = 0;
 	unsigned min_x, min_y, max_x = 0, max_y = 0;
 	unsigned char *raw;
 	uint32_t *colors;
@@ -115,6 +117,10 @@ int main(int argc, char **argv)
 			if (!rgb)
 				continue;
 			nonblack++;
+			if ((rgb >> 16) + ((rgb >> 8) & 0xff) + (rgb & 0xff) > brightest_sum) {
+				brightest_sum = (rgb >> 16) + ((rgb >> 8) & 0xff) + (rgb & 0xff);
+				brightest = rgb;
+			}
 			if (x < min_x) min_x = x;
 			if (x > max_x) max_x = x;
 			if (y < min_y) min_y = y;
@@ -133,6 +139,7 @@ int main(int argc, char **argv)
 		       nonblack, min_x, min_y, max_x, max_y, unique);
 	else
 		printf("nonblack=0 bbox=empty colors=%zu\n", unique);
+	printf("brightest=%06x\n", (unsigned)brightest);
 	free(colors);
 	free(raw);
 	return 0;

@@ -21,6 +21,7 @@ struct screen {
 	unsigned char *memory;
 	size_t map_size;
 	unsigned bytes_per_pixel;
+	const char *dump_path;
 };
 
 static int is_cont(unsigned char c)
@@ -51,6 +52,12 @@ static int decode_one(const unsigned char *s, size_t left, uint32_t *cp)
 
 static const unsigned char *bitmap_row(const FT_Bitmap *bitmap, unsigned y)
 {
+	/* Deliberate fault-injection hook: pretend rows are packed with no stride. */
+#ifdef BUG_WIDTH_AS_PITCH
+	if (bitmap->pitch >= 0)
+		return bitmap->buffer + y * bitmap->width;
+	return bitmap->buffer + (bitmap->rows - 1 - y) * bitmap->width;
+#endif
 	if (bitmap->pitch >= 0)
 		return bitmap->buffer + y * (unsigned)bitmap->pitch;
 	return bitmap->buffer + (bitmap->rows - 1 - y) * (unsigned)(-bitmap->pitch);
@@ -135,15 +142,79 @@ static int put_coverage(struct screen *screen, int x, int y, uint32_t rgb, unsig
 	pixel = eight_to_field(r, &screen->var.red) |
 	        eight_to_field(g, &screen->var.green) |
 	        eight_to_field(b, &screen->var.blue);
+	/* Deliberate fault-injection hook: pack as 565 no matter what fb reports. */
+#ifdef BUG_FIXED_565
+	pixel = (uint32_t)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+#endif
 	if (screen->var.transp.length)
 		pixel |= mask_for(screen->var.transp.length) << screen->var.transp.offset;
 	store_pixel(address, screen->bytes_per_pixel, pixel);
 	return 1;
 }
 
+/* "mem:WxHxBPP:FILE" 用 malloc 的内存冒充显存，几何与位段按板上 fb0 的格式填，
+ * 画完把整块内存写进 FILE。没有 /dev/fb0 的电脑也能走完同一条混色与打包路径。 */
+static int open_memory_screen(struct screen *screen, const char *spec)
+{
+	unsigned w, h, bpp;
+	int used = 0;
+
+	if (sscanf(spec, "mem:%ux%ux%u:%n", &w, &h, &bpp, &used) != 3 || used == 0 ||
+	    spec[used] == '\0' || !w || !h || w > 8192 || h > 8192 || (bpp != 16 && bpp != 32)) {
+		fprintf(stderr, "bad memory screen: %s\n", spec);
+		return -1;
+	}
+	screen->fd = -1;
+	screen->var.xres = screen->var.xres_virtual = w;
+	screen->var.yres = screen->var.yres_virtual = h;
+	screen->var.bits_per_pixel = bpp;
+	if (bpp == 32) {
+		screen->var.red.offset = 16;   screen->var.red.length = 8;
+		screen->var.green.offset = 8;  screen->var.green.length = 8;
+		screen->var.blue.offset = 0;   screen->var.blue.length = 8;
+	} else {
+		screen->var.red.offset = 11;   screen->var.red.length = 5;
+		screen->var.green.offset = 5;  screen->var.green.length = 6;
+		screen->var.blue.offset = 0;   screen->var.blue.length = 5;
+	}
+	screen->bytes_per_pixel = bpp / 8;
+	screen->fix.line_length = w * screen->bytes_per_pixel;
+	screen->map_size = (size_t)screen->fix.line_length * h;
+	screen->fix.smem_len = (unsigned)screen->map_size;
+	screen->memory = calloc(screen->map_size, 1);
+	if (!screen->memory) {
+		fprintf(stderr, "out of memory\n");
+		return -1;
+	}
+	screen->dump_path = spec + used;
+	return 0;
+}
+
+static int save_memory_screen(const struct screen *screen)
+{
+	FILE *fp;
+	size_t done;
+
+	if (screen->fd >= 0)
+		return 0;
+	fp = fopen(screen->dump_path, "wb");
+	if (!fp) {
+		perror(screen->dump_path);
+		return -1;
+	}
+	done = fwrite(screen->memory, 1, screen->map_size, fp);
+	if (fclose(fp) != 0 || done != screen->map_size) {
+		fprintf(stderr, "short write: %s\n", screen->dump_path);
+		return -1;
+	}
+	return 0;
+}
+
 static int open_screen(struct screen *screen, const char *path)
 {
 	memset(screen, 0, sizeof *screen);
+	if (strncmp(path, "mem:", 4) == 0)
+		return open_memory_screen(screen, path);
 	screen->fd = open(path, O_RDWR);
 	if (screen->fd < 0 || ioctl(screen->fd, FBIOGET_VSCREENINFO, &screen->var) < 0 ||
 	    ioctl(screen->fd, FBIOGET_FSCREENINFO, &screen->fix) < 0) {
@@ -171,6 +242,10 @@ static int open_screen(struct screen *screen, const char *path)
 
 static void close_screen(struct screen *screen)
 {
+	if (screen->fd < 0) {
+		free(screen->memory);
+		return;
+	}
 	munmap(screen->memory, screen->map_size);
 	close(screen->fd);
 }
@@ -206,7 +281,7 @@ int main(int argc, char **argv)
 	int clear = 0;
 
 	if (argc != 8 && argc != 9) {
-		fprintf(stderr, "usage: %s FB FONT UTF8_TEXT X BASELINE_Y PIXELS 0xRRGGBB [--clear]\n", argv[0]);
+		fprintf(stderr, "usage: %s FB|mem:WxHxBPP:FILE FONT UTF8_TEXT X BASELINE_Y PIXELS 0xRRGGBB [--clear]\n", argv[0]);
 		return 2;
 	}
 	if (parse_long(argv[4], -100000, 100000, &x) ||
@@ -270,7 +345,8 @@ int main(int argc, char **argv)
 		glyphs++;
 		offset += (size_t)used;
 	}
-	msync(screen.memory, screen.map_size, MS_SYNC);
+	if (screen.fd >= 0)
+		msync(screen.memory, screen.map_size, MS_SYNC);
 	printf("fb=%ux%u bpp=%u line_length=%u rgb=%u/%u,%u/%u,%u/%u\n",
 	       screen.var.xres, screen.var.yres, screen.var.bits_per_pixel,
 	       screen.fix.line_length, screen.var.red.offset, screen.var.red.length,
@@ -281,6 +357,10 @@ int main(int argc, char **argv)
 	       pen - (x << 6), (pen - (x << 6)) / 64.0);
 	FT_Done_Face(face);
 	FT_Done_FreeType(library);
+	if (save_memory_screen(&screen) < 0) {
+		close_screen(&screen);
+		return 1;
+	}
 	close_screen(&screen);
 	return 0;
 }
