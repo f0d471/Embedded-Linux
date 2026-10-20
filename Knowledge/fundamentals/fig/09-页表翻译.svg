@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="640" viewBox="0 0 1000 640">
+  <defs>
+    <marker id="ar" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#333"/>
+    </marker>
+    <marker id="ard" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0,0 L9,4.5 L0,9 z" fill="#666"/>
+    </marker>
+  </defs>
+  <style>
+    text { font-family: "Microsoft YaHei", sans-serif; fill: #222; }
+    .code { font-family: Consolas, monospace; }
+    .t { font-size: 18px; font-weight: bold; }
+    .h { font-size: 13px; font-weight: bold; }
+    .b { font-size: 12px; }
+    .s { font-size: 11px; fill: #555; }
+    .c { font-size: 14px; font-weight: bold; }
+    rect.box { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    rect.cell { fill: #fff; stroke: #333; stroke-width: 1.2; }
+    path.w { fill: none; stroke: #333; stroke-width: 1.4; }
+    path.dash { fill: none; stroke: #666; stroke-width: 1.3; stroke-dasharray: 5,4; }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="640" fill="#fff"/>
+  <text class="t" x="24" y="32">一次访存的翻译：四级页表与缺页的两条出路</text>
+  <text class="s" x="24" y="54">实线=MMU 查表通路；虚线=PTE 的存在位为 0 时交给内核的两条出路。</text>
+
+  <!-- VA 拆段 -->
+  <text class="h" x="30" y="86">虚拟地址 0x000057ad91b0b010（twoaddr 实测的 &amp;g，约 88 TiB）</text>
+  <rect class="cell" x="30"  y="98" width="156" height="46"/>
+  <rect class="cell" x="188" y="98" width="156" height="46"/>
+  <rect class="cell" x="346" y="98" width="156" height="46"/>
+  <rect class="cell" x="504" y="98" width="156" height="46"/>
+  <rect class="cell" x="662" y="98" width="156" height="46"/>
+  <text class="c code" x="94"  y="118" text-anchor="middle">0x0AF</text>
+  <text class="c code" x="252" y="118" text-anchor="middle">0x0B6</text>
+  <text class="c code" x="410" y="118" text-anchor="middle">0x08D</text>
+  <text class="c code" x="570" y="118" text-anchor="middle">0x10B</text>
+  <text class="c code" x="728" y="118" text-anchor="middle">0x010</text>
+  <text class="s" x="94"  y="136" text-anchor="middle">PGD 下标 (175)</text>
+  <text class="s" x="252" y="136" text-anchor="middle">PUD 下标 (182)</text>
+  <text class="s" x="410" y="136" text-anchor="middle">PMD 下标 (141)</text>
+  <text class="s" x="570" y="136" text-anchor="middle">PTE 下标 (267)</text>
+  <text class="s" x="728" y="136" text-anchor="middle">页内偏移 (16)</text>
+  <text class="s" x="840" y="112">9+9+9+9 位查表</text>
+  <text class="s" x="840" y="130">12 位页内偏移</text>
+
+  <!-- 四级表链 -->
+  <rect class="box" x="40" y="200" width="180" height="84"/>
+  <text class="h" x="54" y="224">PGD 表</text>
+  <text class="s" x="54" y="246">512 项 × 8 字节</text>
+  <text class="code s" x="54" y="266">第 175 项 --&gt;</text>
+
+  <path class="w" d="M220,242 L262,242" marker-end="url(#ar)"/>
+
+  <rect class="box" x="264" y="200" width="180" height="84"/>
+  <text class="h" x="278" y="224">PUD 表</text>
+  <text class="s" x="278" y="246">512 项 × 8 字节</text>
+  <text class="code s" x="278" y="266">第 182 项 --&gt;</text>
+
+  <path class="w" d="M444,242 L486,242" marker-end="url(#ar)"/>
+
+  <rect class="box" x="488" y="200" width="180" height="84"/>
+  <text class="h" x="502" y="224">PMD 表</text>
+  <text class="s" x="502" y="246">512 项 × 8 字节</text>
+  <text class="code s" x="502" y="266">第 141 项 --&gt;</text>
+
+  <path class="w" d="M668,242 L710,242" marker-end="url(#ar)"/>
+
+  <rect class="box" x="712" y="200" width="252" height="84"/>
+  <text class="h" x="726" y="224">PTE 表 · 第 267 项</text>
+  <text class="code s" x="726" y="246">物理页号 | P | RW | US | NX</text>
+  <text class="s" x="726" y="266">存在位、可写位等记在这一级</text>
+
+  <!-- 查表成功：到物理页 -->
+  <path class="w" d="M838,284 L838,328" marker-end="url(#ar)"/>
+  <text class="s" x="848" y="312">存在位=1：翻译完成</text>
+
+  <rect class="box" x="712" y="330" width="252" height="72"/>
+  <text class="h" x="726" y="354">物理页</text>
+  <text class="code s" x="726" y="376">物理地址 = 页号×4096 + 0x010</text>
+  <text class="s" x="726" y="394">内存条只认这个地址</text>
+
+  <!-- PTE 项为空时的两条出路 -->
+  <path class="dash" d="M712,262 L640,262 L640,470 L420,470" marker-end="url(#ard)"/>
+  <text class="s" x="600" y="452">存在位=0</text>
+
+  <rect class="box" x="60" y="430" width="360" height="118"/>
+  <text class="h" x="76" y="456">出路一：缺页，登记过 → 兑现</text>
+  <text class="s" x="76" y="480">按登记办事：分配物理页，或把文件那一页</text>
+  <text class="s" x="76" y="500">读进页缓存；填好 PTE，让那条指令重跑。</text>
+  <text class="s" x="76" y="524">正常流程，程序毫无察觉；本篇第 2 节量</text>
+  <text class="s" x="76" y="540">的就是它的代价（512 次兑现 = 44 ms）</text>
+
+  <path class="dash" d="M900,284 L900,500 L900,506 L620,506" marker-end="url(#ard)"/>
+  <text class="s" x="910" y="440">登记没有，</text>
+  <text class="s" x="910" y="458">或权限位不放行</text>
+
+  <rect class="box" x="470" y="430" width="380" height="118"/>
+  <text class="h" x="486" y="456">出路二：没登记 / 权限不许 → 发信号</text>
+  <text class="s" x="486" y="480">地址不属于本进程：SIGSEGV (SEGV_MAPERR)</text>
+  <text class="s" x="486" y="500">登记在但权限不对：SIGSEGV (SEGV_ACCERR)</text>
+  <text class="s" x="486" y="524">登记在但文件内容不够兑现：SIGBUS (BUS_ADRERR)</text>
+  <text class="s" x="486" y="540">退出码 135/139 = 128 + 信号号（第 9 节逐个实测）</text>
+
+  <!-- 图例 -->
+  <text class="s" x="24" y="606">每张表正好一页：512 项 × 8 字节 = 4096 字节。四级查表是 MMU 硬件在每一次访存上现做的。</text>
+  <text class="s" x="24" y="626">两级合计能表达 512⁴ × 4096 = 256 TiB 虚拟地址空间；fork 时整套表复制一份（第 1.6 节）。</text>
+</svg>
