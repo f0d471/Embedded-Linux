@@ -1,0 +1,27 @@
+# 函數族逐个跑一遍，结果与手算对照
+src := main.c sub.c app.c
+
+show:
+	@echo "subst     : $(subst ee,EE,feet on the street)"
+	@echo "patsubst  : $(patsubst %.c,%.o,x.c.c bar.c)"
+	@echo "strip     : [$(strip   a   b   c  )]"
+	@echo "findstring: [$(findstring a,a b c)] [$(findstring a,b c)]"
+	@echo "filter    : $(filter %.c %.s,foo.c bar.c baz.s ugh.h)"
+	@echo "filter-out: $(filter-out %.c %.s,foo.c bar.c baz.s ugh.h)"
+	@echo "sort      : $(sort foo bar lose foo)"
+	@echo "dir       : $(dir src/foo.c hacks)"
+	@echo "notdir    : $(notdir src/foo.c hacks)"
+	@echo "suffix    : $(suffix src/foo.c hacks)"
+	@echo "basename  : $(basename src/foo.c hacks)"
+	@echo "addsuffix : $(addsuffix .c,foo bar)"
+	@echo "addprefix : $(addprefix src/,foo bar)"
+	@echo "wildcard  : $(wildcard ../*.c)"
+	@echo "foreach   : $(foreach f,$(src),.$(f).d)"
+	@echo "if(true)  : $(if $(src),non-empty,empty)"
+	@echo "if(false) : [$(if ,non-empty,empty)]"
+	@echo "firstword : $(firstword arm-linux-gnueabihf-gcc)"
+	@echo "subst+fw  : $(firstword $(subst -, ,arm-linux-gnueabihf-))"
+	@echo "shell     : $(shell echo $$((6 * 7)))"
+	@echo "origin src: $(origin src)"
+	@echo "origin CC : $(origin CC)"
+	@echo "origin ZZ : $(origin ZZ_UNDEF)"
