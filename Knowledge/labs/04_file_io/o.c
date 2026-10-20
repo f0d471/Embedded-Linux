@@ -1,4 +1,4 @@
-/* 04 章 3.6 节：让 open 失败，看清 errno。
+/* 04 篇 1.7 节：让 open 失败，看清 errno。
  * 编译：gcc -Wall o.c -o o && ./o
  */
 #include <stdio.h>
@@ -22,6 +22,6 @@ int main(void)
     try_open("用 O_RDWR 打开一个目录", "/tmp", O_RDWR, 0);
     try_open("用 O_RDONLY 打开一个目录", "/tmp", O_RDONLY, 0);
     try_open("O_CREAT|O_EXCL 打已存在文件", "/etc/hostname", O_WRONLY | O_CREAT | O_EXCL, 0644);
-    try_open("用 O_WRONLY 打开 444 的文件", "/etc/hostname", O_WRONLY, 0);
+    try_open("用 O_WRONLY 打开 root 的 644 文件", "/etc/hostname", O_WRONLY, 0);
     return 0;
 }

@@ -1,7 +1,7 @@
-/* 04 章 2.5 节：用 dup2 把 printf 骗进文件，以及 _exit 的那个坑。
+/* 04 篇 3.2 节：用 dup2 把 printf 骗进文件，以及 _exit 的那个坑。
  * 编译：gcc -Wall dup2_printf.c -o dup2_printf
  * 跑：  ./dup2_printf out.txt && cat out.txt && wc -c < out.txt
- * 注错：把 return 0 改成 _exit(0) 再跑——文件变 0 字节（缓冲没冲）。
+ * 注错：删掉 fflush 一行，并把 return 0 改成 _exit(0) 再跑，文件变 0 字节（缓冲没冲）。
  */
 #include <stdio.h>
 #include <fcntl.h>

@@ -1,6 +1,6 @@
-/* 04 章 5.2 节：read/write 循环拷 vs mmap 拷——数系统调用，也数时间。
- * 编译：gcc -O2 -Wall cp_rw.c -o cp_rw && gcc -O2 -Wall cp_mmap.c -o cp_mmap
- *   （cp_mmap 也可以直接编这份源码: gcc -O2 -Wall -DUSE_MMAP cp_rw.c -o cp_mmap）
+/* 04 篇 7.2 节：read/write 循环拷与 mmap 拷，数系统调用，也数时间。
+ * 编译：gcc -O2 -Wall cp_rw.c -o cp_rw
+ *       gcc -O2 -Wall -DUSE_MMAP cp_rw.c -o cp_mmap   （同一份源码,-DUSE_MMAP 走 mmap 支路）
  * 跑：  head -c 8388608 /dev/urandom > big.bin
  *       strace -f -e trace=read,write -o t1.txt ./cp_rw big.bin c1.bin
  *       strace -f -e trace=read,write -o t2.txt ./cp_mmap big.bin c2.bin

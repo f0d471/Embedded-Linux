@@ -1,4 +1,4 @@
-/* 04 章 3.5 节：mode 是"请求"不是"落地"，且对已存在的文件根本不看。
+/* 04 篇 1.6 节：mode 是"请求"不是"落地"，且对已存在的文件根本不看。
  * 编译：gcc -Wall mode.c -o mode
  * 跑：  rm -f a.txt && ./mode a.txt 0777 && stat -c '%a %n' a.txt
  *       ./mode a.txt 0600 && stat -c '%a %n' a.txt   ← 已存在，权限不变

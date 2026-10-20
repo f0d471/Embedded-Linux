@@ -1,4 +1,4 @@
-/* 04 章 4.2 节：数一数标准 IO 那 4096 字节的缓冲层。
+/* 04 篇 5.2 节：数一数标准 IO 那 4096 字节的缓冲层。
  * 编译：gcc -Wall buf.c -o buf
  * 跑：  strace -f -e trace=write -o t.txt ./buf > out.txt
  *       grep -cE '(^|[0-9]+ +)write\(' t.txt      ← 数 write 次数

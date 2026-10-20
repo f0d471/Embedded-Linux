@@ -1,4 +1,4 @@
-/* 04 章 3.3 节：lseek 到中间再 write，是覆盖不是插入。
+/* 04 篇 2.4 节：lseek 到中间再 write，是覆盖不是插入。
  * 编译：gcc -Wall wp.c -o wp
  * 跑：  printf 'abcdefghijklmnopqrst\n' > w.txt && ./wp w.txt && cat w.txt && wc -c < w.txt
  */

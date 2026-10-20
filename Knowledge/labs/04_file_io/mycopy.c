@@ -1,5 +1,5 @@
-/* 04 章 3.4 节 L3：自己写一个 copy（参考答案）。
- * 判据:见教程 3.4 节——cmp 逐字节一致、空文件也能拷。
+/* 04 篇 2.6 节 L3：自己写一个 copy（参考答案）。
+ * 判据:见教程 2.6 节,cmp 逐字节一致、空文件也能拷。
  * 编译：gcc -Wall mycopy.c -o mycopy
  */
 #include <stdio.h>
@@ -28,7 +28,7 @@ int main(int argc, char **argv)
         return 1;
     }
     while ((n = read(in, buf, sizeof(buf))) > 0) {
-        w = write(out, buf, n);      /* 用返回值 n, 不是 sizeof(buf)——
+        w = write(out, buf, n);      /* 用返回值 n, 不是 sizeof(buf);
                                         注错:换成 sizeof(buf) 再 cmp,见红 */
         if (w != n) {
             perror("write");

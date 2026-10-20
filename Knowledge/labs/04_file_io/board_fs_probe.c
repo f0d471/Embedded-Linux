@@ -65,7 +65,7 @@ static int probe_sparse(const char *dir)
 	int fd = -1;
 	int rc = -1;
 
-	if (make_path(path, sizeof(path), dir, "codex-hole") < 0)
+	if (make_path(path, sizeof(path), dir, "hole-probe") < 0)
 		goto out;
 	fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd < 0)
